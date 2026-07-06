@@ -7,8 +7,8 @@ When resuming:
 1. Use `codex/phase1-mvp` as the active branch, or merge it before making new changes.
 2. Read `CODEX_HANDOFF.md` and `PLAN.md` before editing.
 3. Do not force-push or overwrite `claude/stt-conference-system-6bt09c`.
-4. Keep Phase 1 narrow: scaffold the Python CLI package, then implement the STT bake-off path first.
-5. Put cloud STT and LLM calls behind adapters so tests can run with fakes.
-6. Preserve the safety rules in `PLAN.md`: correction diff validation, source-labeled enrichment, and transcript-body separation from AI research notes.
+4. Keep Phase 1 narrow: build around the tested Knowledge Pack planner, then implement slide extraction adapters and the STT bake-off path.
+5. Put OCR, cloud STT, web search, PDF parsing, and LLM calls behind adapters so tests can run with fakes.
+6. Preserve the safety rules in `PLAN.md`: reference-first grounding, correction diff validation, source-labeled enrichment, and transcript-body separation from AI research notes.
 
-The repo currently has planning docs only; no working package has been implemented yet.
+The repo now has a small tested package scaffold. `src/stt_pipeline/knowledge_pack.py` is deterministic planning logic only; it does not call external services.

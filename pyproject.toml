@@ -1,0 +1,25 @@
+[project]
+name = "stt-conference"
+version = "0.1.0"
+description = "Conference, lecture, and meeting STT pipeline with slide-aware knowledge packs."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = []
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+]
+pdf = [
+    "pymupdf>=1.24",
+    "pdfplumber>=0.11",
+    "camelot-py>=0.11",
+]
+
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]

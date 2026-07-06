@@ -200,6 +200,20 @@ ffmpeg -i input.wav -ac 1 -ar 16000 -af loudnorm=I=-16:TP=-1.5:LRA=11 prep.wav
 - **전사 본문 불가침**: 보강·조사 내용은 별도 섹션/주석으로만. 전사 교정 diff 검증(§3-③)과 동일한 사상.
 - **자료-발화 불일치는 숨기지 않고 드러냄**: "슬라이드엔 있으나 발표에서 언급 안 함", "발표자가 슬라이드와 다르게 말함" 같은 차이는 별도 표기 → 오히려 이 시스템의 가치.
 
+### 4-6. 보강 근거 우선순위 (Phase 1 스캐폴드 반영)
+
+보강은 단편 키워드가 아니라 강한 근거부터 시작합니다.
+
+1. **슬라이드에 적힌 레퍼런스**: 직접 검색해 원 논문 PDF/초록/figure caption을 확인. 같은 레퍼런스가 여러 슬라이드에 반복되면 우선순위 상승.
+2. **긴 문장/결론문**: 슬라이드 제목, 설명문, 박스 안 문장을 핵심 anchor로 사용.
+3. **figure/table 문맥**: 그래프 축, legend, 조건명, 통계표시를 "무엇을 비교했는가" 관점에서 추출.
+4. **고유명사/물질명**: 프로젝트명, 인물명, peptide/polymer/nanoparticle label을 용어집과 검색 후보로 사용.
+5. **단편 키워드**: STT 용어집에는 넣되 보강 설명의 중심 근거로 쓰지 않고 `검토필요`로 낮게 둠.
+
+레퍼런스 PDF가 확보되면 기존 PDF figure/table 추출 도구 체인을 사용합니다: PyMuPDF로 페이지 렌더링/crop, pdfplumber로 텍스트와 표 후보 추출, Camelot으로 표 영역을 tight하게 잡습니다. 원 논문 figure/table/caption과 슬라이드 crop이 매칭되면 근거 등급을 최상위로 둡니다.
+
+전사와 발표자료는 순환적으로 보강합니다. 슬라이드 용어는 STT와 교정 프롬프트에 들어가고, 전사 텍스트는 슬라이드 figure/table의 실험 의도와 결론을 해석하는 데 쓰입니다. 다만 최종 노트는 `발표 전사`, `슬라이드 텍스트`, `레퍼런스 PDF`, `추가 조사`, `검토 필요`를 분리해 환각과 출처 혼합을 막습니다.
+
 ---
 
 ## 5. 프로젝트 구조 (구현 시)
@@ -214,11 +228,12 @@ stt-conference/
 │   │   └── meeting.yaml      # 회의: diarization on, 액션아이템
 │   └── glossaries/           # 분야별 용어집 (누적 관리)
 ├── src/stt_pipeline/
+│   ├── knowledge_pack.py     # 자료 단서 우선순위화 + 전사/슬라이드 정렬 + PDF 추출 작업 계획
 │   ├── cli.py                # stt run recording.wav --profile seminar --pack ./materials/
 │   ├── preprocess.py         # ffmpeg 변환, 무음 트리밍
 │   ├── stt_providers/        # gpt4o / elevenlabs / assemblyai / mlx(폴백) 어댑터
 │   ├── bakeoff.py            # STT API 비교 스크립트 (Phase 1 첫 작업)
-│   ├── knowledge_pack.py     # 자료 추출(PPT/사진) + 조사(Phase 3)
+│   ├── slide_extract.py      # PPT/사진 OCR 및 figure/table crop 후보 추출
 │   ├── correct.py            # Claude 교정 + diff 검증
 │   ├── summarize.py          # 프로필별 요약
 │   ├── enrich.py             # 슬라이드-전사 정렬 + 보강 노트 (Phase 3)
