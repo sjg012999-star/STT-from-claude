@@ -1,0 +1,42 @@
+# Codex Handoff - 2026-07-06
+
+## Branch State
+
+- Original Claude branch: `claude/stt-conference-system-6bt09c`
+- Codex continuation branch: `codex/phase1-mvp`
+- Current safe base: continue from `codex/phase1-mvp`
+
+Do not force-push or overwrite the original Claude branch. If Claude resumes work later, start from `codex/phase1-mvp` or merge this branch first.
+
+## What Codex Changed
+
+- Created `codex/phase1-mvp` from `claude/stt-conference-system-6bt09c`.
+- Removed a broken trailing fragment from the end of `PLAN.md`.
+- Added this handoff file plus agent notes so future Claude/Codex sessions can recover context quickly.
+
+No Phase 1 implementation code has been added yet.
+
+## Current Repo Contents
+
+- `README.md`: high-level project summary and phase checklist.
+- `PLAN.md`: architecture, roadmap, risks, and target file layout.
+- `CODEX_HANDOFF.md`: branch handoff and continuation instructions.
+- `CLAUDE.md`: Claude-specific working notes.
+- `AGENTS.md`: general agent working notes.
+
+## Next Implementation Order
+
+1. Add Python project scaffold: `pyproject.toml`, `src/stt_pipeline/`, `tests/`.
+2. Implement config/profile loading before external API calls.
+3. Implement deterministic preprocessing command construction and test it without running real audio.
+4. Implement STT provider interfaces with fake providers first.
+5. Add the Phase 1 bake-off CLI around provider adapters.
+6. Add report output stubs for `transcript.md`, `transcript.json`, and `transcript.srt`.
+
+Keep real cloud STT and Claude API calls behind adapters. Tests should use fakes and local fixtures, not paid network calls.
+
+## Conflict Guidance
+
+- If `PLAN.md` conflicts, keep the fixed ending with the risk table as the final section.
+- If implementation begins in another branch, prefer merging that branch into `codex/phase1-mvp` before adding more code.
+- Keep Knowledge Pack enrichment separate from the transcript body. The project design requires source labels for generated notes and diff validation for transcript corrections.
