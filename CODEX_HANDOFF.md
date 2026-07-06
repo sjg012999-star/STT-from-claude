@@ -27,18 +27,24 @@ No real OCR, STT, web search, Claude API, or PDF parsing calls are wired yet. Th
 - `AGENTS.md`: general agent working notes.
 - `pyproject.toml`: Python package/test metadata.
 - `src/stt_pipeline/knowledge_pack.py`: reference-first Knowledge Pack planner.
+- `src/stt_pipeline/slide_extract.py`: OCR-text-to-slide-evidence heuristics.
+- `src/stt_pipeline/pdf_tools.py`: command builder for the existing PDF figure/table extraction script.
 - `tests/test_knowledge_pack.py`: tests for prioritization, PDF extraction jobs, and transcript-slide alignment.
+- `tests/test_slide_extract.py`: tests for OCR text classification into slide evidence.
+- `tests/test_pdf_tools.py`: tests for PDF extraction command planning.
+- `docs/tooling.md`: GitHub/tooling candidates and integration rules.
 
 ## Next Implementation Order
 
 1. Add Python project scaffold: `pyproject.toml`, `src/stt_pipeline/`, `tests/`.
 2. Implement config/profile loading before external API calls.
-3. Add slide extraction adapters that can accept OCR text now and later real PPT/photo OCR.
+3. Add real PPT/photo OCR adapters that produce `SlideOcrInput` fixtures.
 4. Connect reference PDF acquisition to the existing figure/table extraction toolchain.
-5. Implement deterministic preprocessing command construction and test it without running real audio.
-6. Implement STT provider interfaces with fake providers first.
-7. Add the Phase 1 bake-off CLI around provider adapters.
-8. Add report output stubs for `transcript.md`, `transcript.json`, and `transcript.srt`.
+5. Add skipped integration tests for any optional external tool before wiring it into the CLI.
+6. Implement deterministic preprocessing command construction and test it without running real audio.
+7. Implement STT provider interfaces with fake providers first.
+8. Add the Phase 1 bake-off CLI around provider adapters.
+9. Add report output stubs for `transcript.md`, `transcript.json`, and `transcript.srt`.
 
 Keep real cloud STT and Claude API calls behind adapters. Tests should use fakes and local fixtures, not paid network calls.
 

@@ -17,6 +17,7 @@ Development guidance:
 - Preserve the Knowledge Pack evidence order: reference PDF, slide sentence, figure/table context, named entity, isolated keyword.
 - Treat the deck as one integrated source; repeated references across slides increase priority.
 - Use transcript text to interpret slides and slide terms to improve STT, but keep source sections separate.
+- Read `docs/tooling.md` before adding OCR/PDF dependencies.
 - Do not call paid or network APIs in tests; use fakes and fixtures.
 - Add small, testable modules rather than a single large script.
 - Avoid committing real recordings, API keys, generated transcripts from private sessions, or conference materials.

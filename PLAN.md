@@ -229,11 +229,13 @@ stt-conference/
 │   └── glossaries/           # 분야별 용어집 (누적 관리)
 ├── src/stt_pipeline/
 │   ├── knowledge_pack.py     # 자료 단서 우선순위화 + 전사/슬라이드 정렬 + PDF 추출 작업 계획
+│   ├── slide_extract.py      # OCR 텍스트 → 슬라이드 근거 구조화
+│   ├── pdf_tools.py          # 기존 PDF Figure/Table 추출 스크립트 호출 계획
 │   ├── cli.py                # stt run recording.wav --profile seminar --pack ./materials/
 │   ├── preprocess.py         # ffmpeg 변환, 무음 트리밍
 │   ├── stt_providers/        # gpt4o / elevenlabs / assemblyai / mlx(폴백) 어댑터
 │   ├── bakeoff.py            # STT API 비교 스크립트 (Phase 1 첫 작업)
-│   ├── slide_extract.py      # PPT/사진 OCR 및 figure/table crop 후보 추출
+│   ├── slide_ocr.py          # PPT/사진 OCR 및 figure/table crop 후보 추출
 │   ├── correct.py            # Claude 교정 + diff 검증
 │   ├── summarize.py          # 프로필별 요약
 │   ├── enrich.py             # 슬라이드-전사 정렬 + 보강 노트 (Phase 3)
