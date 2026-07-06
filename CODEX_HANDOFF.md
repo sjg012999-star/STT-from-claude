@@ -16,7 +16,7 @@ Do not force-push or overwrite the original Claude branch. If Claude resumes wor
 - Added a tested Phase 1 Knowledge Pack scaffold in `src/stt_pipeline/knowledge_pack.py`.
 - Updated README and PLAN to reflect reference-first, deck-level slide analysis and transcript/slide mutual support.
 
-No real OCR, STT, web search, Claude API, or PDF parsing calls are wired yet. The current code is a deterministic planning layer that can be tested without network or paid APIs.
+No real OCR, STT, web search, OpenAI API, or PDF parsing calls are wired yet. The current code is a deterministic planning layer that can be tested without network or paid APIs.
 
 ## Current Repo Contents
 
@@ -27,6 +27,7 @@ No real OCR, STT, web search, Claude API, or PDF parsing calls are wired yet. Th
 - `AGENTS.md`: general agent working notes.
 - `pyproject.toml`: Python package/test metadata.
 - `src/stt_pipeline/knowledge_pack.py`: reference-first Knowledge Pack planner.
+- `src/stt_pipeline/llm_provider.py`: OpenAI-first LLM request planning.
 - `src/stt_pipeline/slide_extract.py`: OCR-text-to-slide-evidence heuristics.
 - `src/stt_pipeline/pdf_tools.py`: command builder for the existing PDF figure/table extraction script.
 - `tests/test_knowledge_pack.py`: tests for prioritization, PDF extraction jobs, and transcript-slide alignment.
@@ -46,7 +47,8 @@ No real OCR, STT, web search, Claude API, or PDF parsing calls are wired yet. Th
 8. Add the Phase 1 bake-off CLI around provider adapters.
 9. Add report output stubs for `transcript.md`, `transcript.json`, and `transcript.srt`.
 
-Keep real cloud STT and Claude API calls behind adapters. Tests should use fakes and local fixtures, not paid network calls.
+Keep real cloud STT and OpenAI API calls behind adapters. Tests should use fakes and local fixtures, not paid network calls.
+OpenAI text/vision model names must come from `OPENAI_MODEL` and `OPENAI_VISION_MODEL`; do not hardcode another provider model into the pipeline.
 
 ## Conflict Guidance
 

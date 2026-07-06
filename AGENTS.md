@@ -10,6 +10,7 @@ Project intent:
 - Prefer cloud STT for quality and speed, with local `mlx-whisper` only as fallback.
 - Keep one pipeline with profile-specific settings rather than separate STT models per use case.
 - Treat transcript correction and AI enrichment as separate layers with explicit provenance.
+- Use OpenAI-first LLM/vision providers for new implementation work unless the user explicitly requests another provider.
 
 Development guidance:
 

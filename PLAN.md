@@ -37,7 +37,7 @@
 | 비용 | 무료 (시간·발열 비용) | 시간당 ~$0.4 안팎 |
 | 프라이버시 | 유리 | 사용자 우선순위상 허용 (성능 > 보안) |
 
-**결정**: 클라우드 STT 기본. 후보(gpt-4o-transcribe / ElevenLabs Scribe / AssemblyAI, 한국어 비중 높으면 클로바 스피치 추가)를 **실제 세미나 녹음 1개로 직접 비교(bake-off)**하여 기본 API를 확정 — Phase 1 첫 작업. 로컬 mlx-whisper large-v3-turbo는 오프라인 폴백 옵션으로만 유지. LLM 교정·요약은 원래부터 API(Claude)이므로 전체 파이프라인이 API 중심으로 일관됩니다.
+**결정**: 클라우드 STT 기본. 후보(gpt-4o-transcribe / ElevenLabs Scribe / AssemblyAI, 한국어 비중 높으면 클로바 스피치 추가)를 **실제 세미나 녹음 1개로 직접 비교(bake-off)**하여 기본 API를 확정 — Phase 1 첫 작업. 로컬 mlx-whisper large-v3-turbo는 오프라인 폴백 옵션으로만 유지. LLM 교정·요약·비전 추출은 OpenAI API 기본으로 둡니다.
 
 ---
 
@@ -50,7 +50,7 @@
         │
         ▼
 ⓪ Knowledge Pack 생성 (자료가 있을 때)
-   - PPT 텍스트 추출(python-pptx) / 사진은 Claude 비전으로 추출
+   - PPT 텍스트 추출(python-pptx) / 사진은 OpenAI vision-capable model로 추출
    - 용어·고유명사·논문 레퍼런스 추출
    - (Phase 3) 레퍼런스 논문 조사: Semantic Scholar/arXiv/웹 검색
         │
@@ -65,12 +65,12 @@
    - 세그먼트 타임스탬프 + (회의 프로필) 내장 화자분리
         │
         ▼
-③ LLM 교정 계층 (Claude API)
+③ LLM 교정 계층 (OpenAI API)
    - 앞뒤 문맥 + Knowledge Pack 용어집 기반 오인식 교정
    - 구조화된 교정 목록(JSON) + difflib 검증으로 환각 차단
         │
         ▼
-④ 정리·요약 (Claude API, 프로필별 템플릿)
+④ 정리·요약 (OpenAI API, 프로필별 템플릿)
         │
         ▼
 ⑤ (Phase 3) 슬라이드-전사 정렬 + 통합 보강 노트
@@ -105,14 +105,14 @@ ffmpeg -i input.wav -ac 1 -ar 16000 -af loudnorm=I=-16:TP=-1.5:LRA=11 prep.wav
 
 **목표**: 억양·소음으로 인한 오인식 단어를 앞뒤 문맥으로 복원하되, **원문을 마음대로 다시 쓰지 않게** 통제하고, 수정한 곳을 전부 추적.
 
-**모델**: `claude-opus-4-8` (입력 $5 / 출력 $25 per 1M tokens)
-- 실시간이 필요 없으므로 **Batch API 50% 할인** 적용 가능
-- 1시간 세미나 ≈ 전사 1만~1.5만 토큰 → 회당 수백 원대
+**모델**: OpenAI text model을 기본으로 사용하되, 실제 모델명은 설정값(`OPENAI_MODEL`, `OPENAI_VISION_MODEL`)으로 둡니다.
+- 실시간이 필요 없으므로 배치/비동기 처리 옵션을 우선 고려
+- 1시간 세미나 ≈ 전사 1만~1.5만 토큰 → 모델별 비용은 선택한 OpenAI 모델 기준으로 산정
 
 **처리 방식**:
 
 1. 전사를 **세그먼트 ID가 붙은 청크**(약 4천 토큰, 앞뒤 500토큰 오버랩)로 분할
-2. 각 청크를 아래 계약으로 Claude에 전달:
+2. 각 청크를 아래 계약으로 OpenAI LLM provider에 전달:
    - 시스템 프롬프트(고정, **prompt caching** 적용): 교정 규칙 + Knowledge Pack 용어집
    - 출력(structured outputs, JSON schema 강제):
 
@@ -146,7 +146,7 @@ ffmpeg -i input.wav -ac 1 -ar 16000 -af loudnorm=I=-16:TP=-1.5:LRA=11 prep.wav
 
 ### ④ 정리·요약
 
-교정 완료된 전체 전사를 입력으로 프로필별 템플릿 요약을 생성합니다 (Claude 1M 컨텍스트 → 1회 호출).
+교정 완료된 전체 전사를 입력으로 프로필별 템플릿 요약을 생성합니다. 긴 전사는 OpenAI LLM provider의 컨텍스트 한도에 맞춰 단일 호출 또는 계층 요약으로 처리합니다.
 
 - **학회**: 발표 개요 → 배경 → 방법론 → 주요 결과 → 한계·향후 과제 → Q&A 정리
 - **강연**: 목차형 구조 요약 + 핵심 메시지 + 인상적 인용(타임스탬프)
@@ -164,7 +164,7 @@ ffmpeg -i input.wav -ac 1 -ar 16000 -af loudnorm=I=-16:TP=-1.5:LRA=11 prep.wav
 |---|---|
 | 초록·강연자 정보 (텍스트) | 그대로 사용 |
 | PPT 파일 | `python-pptx`로 슬라이드별 텍스트·노트 추출 |
-| 슬라이드 사진 | Claude 비전으로 텍스트·수식·그림 설명·레퍼런스 추출 (사진 품질이 낮아도 문맥으로 복원 가능) |
+| 슬라이드 사진 | OpenAI vision-capable model로 텍스트·수식·그림 설명·레퍼런스 추출 (사진 품질이 낮으면 `검토필요`로 표기) |
 
 추출 결과에서 **용어·고유명사·논문 레퍼런스·수식 기호**를 뽑아 구조화 → 이것이 Knowledge Pack의 뼈대.
 
@@ -178,7 +178,7 @@ ffmpeg -i input.wav -ac 1 -ar 16000 -af loudnorm=I=-16:TP=-1.5:LRA=11 prep.wav
 
 - 슬라이드에서 추출한 논문 레퍼런스를 **Semantic Scholar / arXiv API + 웹 검색**으로 조회 → 초록·핵심 결과 수집
 - 강연자의 대표 선행 연구 조사 (발표 배경 이해)
-- 조사 결과를 슬라이드별 컨텍스트로 정리 (Claude 웹 검색 도구 활용)
+- 조사 결과를 슬라이드별 컨텍스트로 정리 (OpenAI provider의 검색/도구 호출 또는 별도 검색 adapter 활용)
 
 ### 4-4. 슬라이드-전사 정렬 + 통합 보강 노트 (Phase 3)
 
@@ -229,6 +229,7 @@ stt-conference/
 │   └── glossaries/           # 분야별 용어집 (누적 관리)
 ├── src/stt_pipeline/
 │   ├── knowledge_pack.py     # 자료 단서 우선순위화 + 전사/슬라이드 정렬 + PDF 추출 작업 계획
+│   ├── llm_provider.py       # OpenAI-first LLM/vision 작업 계획
 │   ├── slide_extract.py      # OCR 텍스트 → 슬라이드 근거 구조화
 │   ├── pdf_tools.py          # 기존 PDF Figure/Table 추출 스크립트 호출 계획
 │   ├── cli.py                # stt run recording.wav --profile seminar --pack ./materials/
@@ -236,7 +237,7 @@ stt-conference/
 │   ├── stt_providers/        # gpt4o / elevenlabs / assemblyai / mlx(폴백) 어댑터
 │   ├── bakeoff.py            # STT API 비교 스크립트 (Phase 1 첫 작업)
 │   ├── slide_ocr.py          # PPT/사진 OCR 및 figure/table crop 후보 추출
-│   ├── correct.py            # Claude 교정 + diff 검증
+│   ├── correct.py            # OpenAI 교정 + diff 검증
 │   ├── summarize.py          # 프로필별 요약
 │   ├── enrich.py             # 슬라이드-전사 정렬 + 보강 노트 (Phase 3)
 │   └── report.py             # md/json/srt 출력
@@ -253,7 +254,7 @@ stt-conference/
 |---|---|---|
 | 전처리 | ~1분 | 무료 |
 | STT (클라우드 API) | 수 분 | ~$0.4 |
-| LLM 교정 (~15K 토큰, 청크별) | 수 분 (Batch: 수십 분) | 일반 ~$0.3 / Batch ~$0.15 |
+| LLM 교정 (~15K 토큰, 청크별) | 수 분 (Batch/비동기: 수십 분) | 선택한 OpenAI 모델 기준 |
 | 요약 | ~1분 | ~$0.1 |
 | Knowledge Pack 조사 (Phase 3, 자료 있을 때) | 수 분 | ~$0.1~0.3 |
 | **합계** | **약 10분 내외** | **회당 1,000원 안팎** |
@@ -268,7 +269,7 @@ stt-conference/
 - [ ] **STT bake-off 스크립트** — 실제 세미나 녹음으로 후보 API 비교, 기본 API 확정 (첫 작업)
 - [ ] 전처리 → 클라우드 STT → md/srt 출력
 - [ ] Knowledge Pack **기본**: PPT/사진 텍스트 추출 → 용어 주입 (STT + 교정)
-- [ ] Claude 교정 계층 (청크 분할, structured outputs, diff 검증) + 교정 내역 표
+- [ ] OpenAI 교정 계층 (청크 분할, structured outputs, diff 검증) + 교정 내역 표
 - [ ] 기본 요약
 - **완료 기준**: `stt run seminar.wav --profile seminar --pack ./materials/` 한 줄로 transcript.md 생성
 
@@ -299,7 +300,7 @@ stt-conference/
 | LLM이 화자의 원래 표현을 과도하게 다듬음 | diff 검증 + "기록 없는 수정 무효" 규칙 + 롤백 |
 | **보강 노트에서 AI 추측이 사실처럼 섞임** | 출처 라벨 강제 + 🔍 항목 인용 필수 + 전사 본문 불가침 (§4-5) |
 | 코드스위칭 구간 오인식 | Knowledge Pack 용어 주입 + 저신뢰 구간 집중 교정 + ⚠️ 플래그 |
-| 슬라이드 사진 품질 저하 | Claude 비전이 문맥으로 복원, 불확실 시 "판독 불가" 표기 |
+| 슬라이드 사진 품질 저하 | OpenAI vision-capable model로 1차 추출하되, 불확실 시 "판독 불가" 표기 |
 | 긴 녹음에서 청크 경계 문맥 단절 | 청크 간 500토큰 오버랩 + 직전 청크 요약 전달 |
 | 클라우드 STT 파일 크기 제한 | 무음 경계 기준 분할 업로드 (문장 중간 절단 방지) |
 | API 장애·오프라인 | mlx-whisper 로컬 폴백 유지 |

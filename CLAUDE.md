@@ -12,4 +12,4 @@ When resuming:
 6. Put OCR, cloud STT, web search, PDF parsing, and LLM calls behind adapters so tests can run with fakes.
 7. Preserve the safety rules in `PLAN.md`: reference-first grounding, correction diff validation, source-labeled enrichment, and transcript-body separation from AI research notes.
 
-The repo now has a small tested package scaffold. `src/stt_pipeline/knowledge_pack.py` is deterministic planning logic only; it does not call external services.
+The repo now has a small tested package scaffold. `src/stt_pipeline/knowledge_pack.py` and `src/stt_pipeline/llm_provider.py` are deterministic planning logic only; they do not call external services.
