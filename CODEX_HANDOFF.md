@@ -48,7 +48,7 @@ No real OCR, STT, web search, OpenAI API, or PDF parsing calls are wired yet. Th
 9. Add report output stubs for `transcript.md`, `transcript.json`, and `transcript.srt`.
 
 Keep real cloud STT and OpenAI API calls behind adapters. Tests should use fakes and local fixtures, not paid network calls.
-OpenAI text/vision model names must come from `OPENAI_MODEL` and `OPENAI_VISION_MODEL`; do not hardcode another provider model into the pipeline.
+OpenAI text model names must come from `OPENAI_MODEL`; use `OPENAI_VISION_MODEL` only when a distinct vision model is needed. Do not hardcode another provider model into the pipeline.
 
 ## Conflict Guidance
 
