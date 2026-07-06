@@ -1,0 +1,37 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "stt-pipeline"
+version = "0.1.0"
+description = "학회·강연·회의 녹음 STT → 문맥교정 → 요약 파이프라인 (Phase 1 MVP, 학회 프로필)"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "STT pipeline contributors" }]
+dependencies = [
+    "PyYAML>=6.0",
+]
+
+# 실제 전사/LLM/자료추출 호출에만 필요한 선택 의존성.
+# 없어도 mock provider + mock LLM 으로 파이프라인 전체가 동작한다.
+[project.optional-dependencies]
+openai = ["openai>=1.30"]
+anthropic = ["anthropic>=0.40"]
+pack = ["python-pptx>=0.6.23"]
+all = ["openai>=1.30", "anthropic>=0.40", "python-pptx>=0.6.23"]
+dev = ["pytest>=7.0"]
+
+[project.scripts]
+stt = "stt_pipeline.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+stt_pipeline = ["py.typed"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
