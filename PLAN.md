@@ -43,42 +43,53 @@
 
 ## 2. 전체 아키텍처
 
+**설계 원칙 — 자료는 STT 앞에서 "가볍게", STT 뒤에서 "깊게".**
+슬라이드 사진만으론 문맥이 부족하고, 발표자의 발화가 있어야 figure/table 의미가 살아납니다.
+그래서 STT **전**에는 자료에서 용어 목록만 뽑아 힌트로 주고(선택), 자료에 대한 **진짜 이해와 보강은 전사가 나온 뒤**에 전사+자료를 함께 보고 수행합니다.
+
 ```
 [입력]
  ├─ 녹음: Zoom H1e WAV (32-bit float)
  └─ 자료(선택): 초록·강연자 정보, PPT 파일, 슬라이드 사진
         │
-        ▼
-⓪ Knowledge Pack 생성 (자료가 있을 때)
-   - PPT 텍스트 추출(python-pptx) / 사진은 Claude 비전으로 추출
-   - 용어·고유명사·논문 레퍼런스 추출
-   - (Phase 3) 레퍼런스 논문 조사: Semantic Scholar/arXiv/웹 검색
-        │
-        ▼
-① 전처리 (ffmpeg)
-   - 16kHz mono, 라우드니스 정규화(EBU R128), 무음 트리밍
-        │
-        ▼
-② STT (클라우드 API — bake-off로 확정)
+        ├───(자료가 있을 때, 선택)──────────────┐
+        │                                        ▼
+        │                         ⓪ 경량 용어 추출 (Phase 1.5)
+        │                            - PPT/텍스트에서 단어·약어·논문명·인물명만
+        │                            - 깊은 이해 X, 짧은 힌트 목록만
+        │                            - 예: "Relevant terms: IBD, PET/MRI,
+        │                              PEG5k-RGD, Crohn's disease. May be in English."
+        ▼                                        │
+① 전처리 (ffmpeg)                                │ (STT 프롬프트 힌트)
+   - 16kHz mono, 라우드니스 정규화, 무음 트리밍   │
+        │                                        │
+        ▼                                        │
+② STT (클라우드 API — bake-off로 확정) ◀─────────┘
    - ko/en 자동 감지, 코드스위칭 대응
-   - Knowledge Pack 용어를 프롬프트/키워드 부스팅으로 주입
+   - 용어 목록을 프롬프트/키워드 힌트로 주입 (자료 있을 때만)
    - 세그먼트 타임스탬프 + (회의 프로필) 내장 화자분리
         │
         ▼
-③ LLM 교정 계층 (Claude API)
-   - 앞뒤 문맥 + Knowledge Pack 용어집 기반 오인식 교정
+③ LLM 교정 계층 (Claude API)  ◀── 자료 전문(있으면) 함께 입력
+   - 전사 + 자료를 같이 보고 문맥 교정 (여기서 자료를 "깊게" 이해)
    - 구조화된 교정 목록(JSON) + difflib 검증으로 환각 차단
+   - (자료 있을 때) 전사↔자료 불일치는 "검토필요"로 표시
         │
         ▼
 ④ 정리·요약 (Claude API, 프로필별 템플릿)
         │
         ▼
-⑤ (Phase 3) 슬라이드-전사 정렬 + 통합 보강 노트
+⑤ (선택/Phase 2+) 문제 구간 재교정 or 저신뢰 세그먼트 재전사(용어 반영)
+⑤' (Phase 2+) 슬라이드-전사 정렬 + 논문 검색 + 통합 보강 노트
    - 슬라이드별: 🎤 발화 / 📊 슬라이드 전용 내용 / 🔍 AI 조사 보강
         │
         ▼
-[산출물] transcript.md / transcript.json / transcript.srt / notes.md
+[산출물] transcript.md / transcript.json / transcript.srt / (+notes.md)
 ```
+
+> 기본 실행은 `음성 → STT → 교정 → 요약`. 자료가 있으면 `자료 → 경량 추출`과
+> `전사+자료 → 교정/보강`만 추가. 논문 검색·figure crop·역이미지검색 등 무거운 기능은
+> 전부 Phase 2+로 미룹니다 (MVP를 가볍게 유지).
 
 ---
 
@@ -247,31 +258,36 @@ stt-conference/
 
 ## 7. 구현 로드맵
 
-### Phase 1 — MVP (CLI, 학회 프로필)
-- [ ] **STT bake-off 스크립트** — 실제 세미나 녹음으로 후보 API 비교, 기본 API 확정 (첫 작업)
-- [ ] 전처리 → 클라우드 STT → md/srt 출력
-- [ ] Knowledge Pack **기본**: PPT/사진 텍스트 추출 → 용어 주입 (STT + 교정)
-- [ ] Claude 교정 계층 (청크 분할, structured outputs, diff 검증) + 교정 내역 표
-- [ ] 기본 요약
-- **완료 기준**: `stt run seminar.wav --profile seminar --pack ./materials/` 한 줄로 transcript.md 생성
+> **경량화 원칙 (codex 논의 반영)**: 처음부터 `자료 분석 → STT 프롬프트 → STT → 교정 → 논문검색 → figure crop → 보강노트`를 다 넣으면 무겁다.
+> 기본은 `음성 → STT → 교정 → 요약`이고, 자료가 있으면 `경량 용어 추출`과 `전사+자료 교정`만 추가. 나머지는 뒤로 미룬다.
 
-### Phase 2 — 프로필 완성
-- [ ] 회의 프로필: 내장 diarization + 액션아이템 추출
-- [ ] 강연 프로필 템플릿
-- [ ] 용어집 자동 누적
-- [ ] Batch API 전환 (교정 비용 50% 절감)
+### Phase 1 — 코어 MVP (자료 없이도 동작) ✅ *골격 구현 완료*
+- [x] STT 어댑터 (`whisper-1` / `gpt-4o-transcribe` / mock) — 자료 없이 동작
+- [x] 전처리(ffmpeg) → STT → 세그먼트 저장
+- [x] Claude 교정 계층 (청크 분할, structured outputs, **diff 검증**) + 교정 내역 표
+- [x] 기본 요약, md/json/srt 출력
+- [ ] **STT bake-off** — 실제 세미나 녹음으로 `whisper-1` vs `gpt-4o-transcribe` 비교, 기본 모델 확정 (키·녹음 확보 시)
+- **완료 기준**: `stt run seminar.wav --profile seminar` (자료 없이) → transcript.md 생성
 
-### Phase 3 — Knowledge Pack 심화 + 편의성
-- [ ] 레퍼런스 논문 조사 (Semantic Scholar/arXiv/웹 검색)
-- [ ] 슬라이드-전사 정렬 + 통합 보강 노트 (출처 라벨 강제)
-- [ ] Gradio 웹 UI: 파일·자료 드롭, 교정/보강 승인·거부 버튼
-- [ ] 저신뢰 구간 오디오 클립 링크 (클릭 재생 검수)
+### Phase 1.5 — 자료 경량 통합 (있으면 켜기)
+- [ ] 자료에서 **용어/약어/논문명/인물명만** 추출 (깊은 이해 X)
+- [ ] 추출 용어를 STT 프롬프트 힌트 + 교정 프롬프트에 반영
+- [ ] 전사 + 자료를 함께 보고 교정, **전사↔자료 불일치는 "검토필요" 표시**
+- [ ] (선택) 저신뢰 세그먼트만 용어 반영해 재전사
+- **완료 기준**: `stt run seminar.wav --pack ./materials/` → 용어 반영 + 검토필요 표시된 transcript.md
+
+### Phase 2 — 확장 (필요할 때만)
+- [ ] 회의 프로필: 내장 diarization + 액션아이템 / 강연 프로필 템플릿
+- [ ] 용어집 자동 누적, Batch API 전환(교정 비용 50%↓)
+- [ ] 슬라이드-전사 정렬 + 논문 검색(Semantic Scholar/arXiv) + figure/table crop
+- [ ] 통합 보강 노트(🎤/📊/🔍 출처 라벨 강제) + Gradio 웹 UI
 
 ### 하지 않기로 한 것 (명시)
 - ❌ Whisper 파인튜닝 — 자료 기반 용어 주입 + LLM 교정으로 충분
 - ❌ STT 로컬 상시 실행 — M2 Air에서 성능 열세, 폴백으로만 유지
 - ❌ 실시간 스트리밍 전사 — 배치 처리가 품질·비용 우위
 - ❌ 용도별 별도 STT 모델 — 프로필로 통합
+- ❌ STT 전 자료 깊이 분석 — 발화가 있어야 슬라이드가 이해됨 → 깊은 이해는 STT 뒤로
 
 ---
 
@@ -286,4 +302,4 @@ stt-conference/
 | 긴 녹음에서 청크 경계 문맥 단절 | 청크 간 500토큰 오버랩 + 직전 청크 요약 전달 |
 | 클라우드 STT 파일 크기 제한 | 무음 경계 기준 분할 업로드 (문장 중간 절단 방지) |
 | API 장애·오프라인 | mlx-whisper 로컬 폴백 유지 |
-📊 **슬라이드에만 있는 내용**: 표 하단의 검증 조건(M
+| **자료 pre-STT 과분석으로 무거워짐** | STT 앞은 용어 목록만, 깊은 이해는 STT 뒤(전사+자료)로 분리 |
