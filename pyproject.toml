@@ -4,7 +4,12 @@ version = "0.1.0"
 description = "Conference, lecture, and meeting STT pipeline with slide-aware knowledge packs."
 readme = "README.md"
 requires-python = ">=3.11"
-dependencies = []
+dependencies = [
+    "openai>=1.0",
+]
+
+[project.scripts]
+stt = "stt_pipeline.cli:main"
 
 [project.optional-dependencies]
 dev = [

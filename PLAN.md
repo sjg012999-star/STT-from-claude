@@ -230,9 +230,11 @@ stt-conference/
 ├── src/stt_pipeline/
 │   ├── knowledge_pack.py     # 자료 단서 우선순위화 + 전사/슬라이드 정렬 + PDF 추출 작업 계획
 │   ├── llm_provider.py       # OpenAI-first LLM/vision 작업 계획
+│   ├── stt_provider.py       # OpenAI STT provider aliases + live adapter + normalized transcript output
+│   ├── transcript.py         # 공통 transcript/segment dataclass
 │   ├── slide_extract.py      # OCR 텍스트 → 슬라이드 근거 구조화
 │   ├── pdf_tools.py          # 기존 PDF Figure/Table 추출 스크립트 호출 계획
-│   ├── cli.py                # stt run recording.wav --profile seminar --pack ./materials/
+│   ├── cli.py                # stt transcribe / stt bakeoff
 │   ├── preprocess.py         # ffmpeg 변환, 무음 트리밍
 │   ├── stt_providers/        # gpt4o / elevenlabs / assemblyai / mlx(폴백) 어댑터
 │   ├── bakeoff.py            # STT API 비교 스크립트 (Phase 1 첫 작업)
@@ -266,9 +268,9 @@ stt-conference/
 ## 7. 구현 로드맵
 
 ### Phase 1 — MVP (CLI, 학회 프로필)
-- [ ] **STT bake-off 스크립트** — 실제 세미나 녹음으로 후보 API 비교, 기본 API 확정 (첫 작업)
+- [x] **STT adapter + bake-off CLI** — `gpt-4o`, `gpt-4o-mini`, `whisper-1`, `diarize` 후보를 같은 녹음으로 비교 가능
 - [ ] 전처리 → 클라우드 STT → md/srt 출력
-- [ ] Knowledge Pack **기본**: PPT/사진 텍스트 추출 → 용어 주입 (STT + 교정)
+- [ ] Knowledge Pack **기본**: PPT/사진 텍스트 추출 → 용어 주입 (현재는 `--terms-file` 힌트만 지원)
 - [ ] OpenAI 교정 계층 (청크 분할, structured outputs, diff 검증) + 교정 내역 표
 - [ ] 기본 요약
 - **완료 기준**: `stt run seminar.wav --profile seminar --pack ./materials/` 한 줄로 transcript.md 생성

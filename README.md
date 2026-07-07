@@ -16,9 +16,30 @@
 - [x] 전체 설계 계획 수립 → [PLAN.md](./PLAN.md)
 - [x] Phase 1 Knowledge Pack 우선순위 스캐폴드 → `src/stt_pipeline/knowledge_pack.py`
 - [x] OCR 텍스트/레퍼런스 PDF 추출 어댑터 경계 → `src/stt_pipeline/slide_extract.py`, `src/stt_pipeline/pdf_tools.py`
+- [x] OpenAI STT adapter + provider bakeoff CLI → `src/stt_pipeline/stt_provider.py`, `src/stt_pipeline/cli.py`
 - [ ] Phase 1: MVP (CLI, 학회 프로필)
 - [ ] Phase 2: 회의/강연 프로필, 용어집 자동 누적
 - [ ] Phase 3: 웹 UI, 검수 도구
+
+## CLI Preview
+
+자료 없이 전사:
+
+```bash
+stt transcribe sample.wav --profile seminar --provider gpt-4o --output out/seminar
+```
+
+자료에서 뽑은 용어 힌트만 추가:
+
+```bash
+stt transcribe sample.wav --profile seminar --provider gpt-4o --terms-file terms.txt --output out/seminar
+```
+
+Whisper와 최신 OpenAI STT 후보 비교:
+
+```bash
+stt bakeoff sample.wav --profile seminar --providers whisper-1,gpt-4o,gpt-4o-mini --output out/bakeoff
+```
 
 ## Knowledge Pack 원칙
 

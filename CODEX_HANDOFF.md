@@ -28,6 +28,9 @@ No real OCR, STT, web search, OpenAI API, or PDF parsing calls are wired yet. Th
 - `pyproject.toml`: Python package/test metadata.
 - `src/stt_pipeline/knowledge_pack.py`: reference-first Knowledge Pack planner.
 - `src/stt_pipeline/llm_provider.py`: OpenAI-first LLM request planning.
+- `src/stt_pipeline/stt_provider.py`: OpenAI STT request planning, live adapter, and normalized transcript output.
+- `src/stt_pipeline/transcript.py`: shared transcript result dataclasses.
+- `src/stt_pipeline/cli.py`: `transcribe` and `bakeoff` command handlers.
 - `src/stt_pipeline/slide_extract.py`: OCR-text-to-slide-evidence heuristics.
 - `src/stt_pipeline/pdf_tools.py`: command builder for the existing PDF figure/table extraction script.
 - `tests/test_knowledge_pack.py`: tests for prioritization, PDF extraction jobs, and transcript-slide alignment.
@@ -44,11 +47,12 @@ No real OCR, STT, web search, OpenAI API, or PDF parsing calls are wired yet. Th
 5. Add skipped integration tests for any optional external tool before wiring it into the CLI.
 6. Implement deterministic preprocessing command construction and test it without running real audio.
 7. Implement STT provider interfaces with fake providers first.
-8. Add the Phase 1 bake-off CLI around provider adapters.
-9. Add report output stubs for `transcript.md`, `transcript.json`, and `transcript.srt`.
+8. Wire LLM correction to normalized transcript output.
+9. Add report output stubs for `transcript.srt` if timestamp/SRT output becomes necessary.
 
 Keep real cloud STT and OpenAI API calls behind adapters. Tests should use fakes and local fixtures, not paid network calls.
 OpenAI text model names must come from `OPENAI_MODEL`; use `OPENAI_VISION_MODEL` only when a distinct vision model is needed. Do not hardcode another provider model into the pipeline.
+The STT adapter already supports `gpt-4o`, `gpt-4o-mini`, `whisper-1`, and `diarize` provider aliases. Knowledge Pack remains optional; Phase 1 uses `--terms-file` only as a compact STT prompt hint.
 
 ## Conflict Guidance
 
