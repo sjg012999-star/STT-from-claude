@@ -5,6 +5,7 @@ import unittest
 from stt_pipeline.materials import load_material_pack
 from stt_pipeline.notes import build_enriched_notes
 from stt_pipeline.pdf_tools import PdfExtractionResult
+from stt_pipeline.reference_lookup import ReferenceLookupResult
 from stt_pipeline.transcript import TranscriptResult, TranscriptSegment
 
 
@@ -68,6 +69,44 @@ class NotesTest(unittest.TestCase):
         self.assertIn("## Additional Research", notes.markdown)
         self.assertIn("_source: additional_research_", notes.markdown)
         self.assertIn("## Needs Review", notes.markdown)
+
+    def test_notes_surface_reference_lookup_quality_and_review_flags(self):
+        transcript = TranscriptResult(
+            provider="gpt-4o",
+            model="gpt-4o-transcribe",
+            profile="seminar",
+            text="Reference lookup needs review.",
+            segments=(
+                TranscriptSegment(
+                    segment_id="seg_001",
+                    text="Reference lookup needs review.",
+                ),
+            ),
+        )
+        lookup_result = ReferenceLookupResult(
+            reference="Author et al.",
+            bibliographic_query="Author et al.",
+            source_slide_ids=("slide-1",),
+            priority_score=100,
+            lookup_url="https://api.openalex.org/works?search=Author",
+            doi="10.5555/test",
+            title="Matching metadata",
+            pdf_url=None,
+            cached_pdf_path=None,
+            status="metadata_found",
+            metadata_source="openalex",
+            metadata_quality_score=60,
+            review_flags=("conflicting_doi", "pdf_missing"),
+        )
+
+        notes = build_enriched_notes(
+            transcript,
+            reference_lookup_results=(lookup_result,),
+        )
+
+        self.assertIn("source: openalex", notes.markdown)
+        self.assertIn("quality: 60", notes.markdown)
+        self.assertIn("review: conflicting_doi, pdf_missing", notes.markdown)
 
 
 if __name__ == "__main__":

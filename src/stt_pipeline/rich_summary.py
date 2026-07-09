@@ -251,11 +251,14 @@ def _lookup_result_context(
     if not reference_lookup_results:
         return "none"
     return "\n".join(
-        "{reference} | {status} | {title} | {pdf}".format(
+        "{reference} | {status} | {source} | quality {quality} | {title} | {pdf} | review {review}".format(
             reference=result.reference,
             status=result.status,
+            source=result.metadata_source or "unknown",
+            quality=result.metadata_quality_score,
             title=result.title or "unknown",
             pdf=result.cached_pdf_path or result.pdf_url or "not found",
+            review=", ".join(result.review_flags) or "none",
         )
         for result in reference_lookup_results
     )

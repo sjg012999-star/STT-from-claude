@@ -104,6 +104,9 @@ class RichSummaryTest(unittest.TestCase):
             pdf_url="https://example.org/paper.pdf",
             cached_pdf_path=Path("reference_cache/paper.pdf"),
             status="downloaded",
+            metadata_source="publisher_pdf_fallback",
+            metadata_quality_score=90,
+            review_flags=("conflicting_doi",),
         )
 
         summarizer.summarize(
@@ -114,6 +117,8 @@ class RichSummaryTest(unittest.TestCase):
         prompt = json.dumps(client.responses.calls[0]["input"])
         self.assertIn("Reference lookup results", prompt)
         self.assertIn("reference_cache/paper.pdf", prompt)
+        self.assertIn("publisher_pdf_fallback", prompt)
+        self.assertIn("conflicting_doi", prompt)
 
     def test_openai_rich_summarizer_rejects_unlabeled_or_unknown_sources(self):
         client = FakeClient(

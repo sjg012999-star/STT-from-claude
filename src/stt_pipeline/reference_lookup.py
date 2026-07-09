@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 from urllib.parse import quote
@@ -35,6 +35,10 @@ class ReferenceLookupResult:
     cached_pdf_path: Path | None
     status: str
     error: str | None = None
+    metadata_source: str | None = None
+    metadata_quality_score: int = 0
+    review_flags: tuple[str, ...] = ()
+    publisher_pdf_urls: tuple[str, ...] = ()
 
 
 class ReferenceLookupHttpClient:
@@ -139,6 +143,10 @@ def reference_lookup_results_to_dict(
                 ),
                 "status": result.status,
                 "error": result.error,
+                "metadata_source": result.metadata_source,
+                "metadata_quality_score": result.metadata_quality_score,
+                "review_flags": list(result.review_flags),
+                "publisher_pdf_urls": list(result.publisher_pdf_urls),
             }
             for result in results
         ]
@@ -155,6 +163,7 @@ def _lookup_one(
     if not lookup_urls:
         return _result_from_plan(plan, lookup_url=None, status="needs_lookup")
     best_result: ReferenceLookupResult | None = None
+    candidates: list[ReferenceLookupResult] = []
     errors = []
     for lookup_url in lookup_urls:
         try:
@@ -167,12 +176,20 @@ def _lookup_one(
         except Exception as exc:  # pragma: no cover - fake clients cover the fallback behavior.
             errors.append(f"{lookup_url}: {exc}")
             continue
+        candidates.append(result)
         if result.status == "downloaded":
-            return result
-        if best_result is None:
-            best_result = result
+            return _finalize_result(result, candidates, plan)
+        best_result = _select_best_result(candidates, plan)
     if best_result is not None:
-        return best_result
+        fallback_result = _try_publisher_pdf_fallback(
+            plan,
+            best_result=best_result,
+            cache_dir=cache_dir,
+            http_client=http_client,
+        )
+        if fallback_result is not None:
+            return _finalize_result(fallback_result, [*candidates, fallback_result], plan)
+        return _finalize_result(best_result, candidates, plan)
     return _result_from_plan(
         plan,
         lookup_url=lookup_urls[0],
@@ -205,6 +222,7 @@ def _lookup_metadata_url(
         pdf_url=pdf_url,
         cached_pdf_path=cached_pdf_path,
         status=status,
+        metadata_source=_metadata_source_from_url(lookup_url),
     )
 
 
@@ -218,6 +236,10 @@ def _result_from_plan(
     pdf_url: str | None = None,
     cached_pdf_path: Path | None = None,
     error: str | None = None,
+    metadata_source: str | None = None,
+    metadata_quality_score: int = 0,
+    review_flags: tuple[str, ...] = (),
+    publisher_pdf_urls: tuple[str, ...] = (),
 ) -> ReferenceLookupResult:
     return ReferenceLookupResult(
         reference=plan.reference,
@@ -231,7 +253,154 @@ def _result_from_plan(
         cached_pdf_path=cached_pdf_path,
         status=status,
         error=error,
+        metadata_source=metadata_source,
+        metadata_quality_score=metadata_quality_score,
+        review_flags=review_flags,
+        publisher_pdf_urls=publisher_pdf_urls,
     )
+
+
+def _select_best_result(
+    candidates: list[ReferenceLookupResult],
+    plan: ReferenceLookupPlan,
+) -> ReferenceLookupResult | None:
+    if not candidates:
+        return None
+    return max(
+        candidates,
+        key=lambda result: _metadata_quality_score(result, plan, review_flags=()),
+    )
+
+
+def _finalize_result(
+    result: ReferenceLookupResult,
+    candidates: list[ReferenceLookupResult],
+    plan: ReferenceLookupPlan,
+) -> ReferenceLookupResult:
+    publisher_pdf_urls = result.publisher_pdf_urls or _publisher_pdf_urls(
+        result.doi or plan.doi
+    )
+    flags = _review_flags(result, candidates, plan)
+    return replace(
+        result,
+        metadata_quality_score=_metadata_quality_score(result, plan, review_flags=flags),
+        review_flags=flags,
+        publisher_pdf_urls=publisher_pdf_urls,
+    )
+
+
+def _review_flags(
+    result: ReferenceLookupResult,
+    candidates: list[ReferenceLookupResult],
+    plan: ReferenceLookupPlan,
+) -> tuple[str, ...]:
+    flags = []
+    if not result.doi:
+        flags.append("doi_missing")
+    if not result.title:
+        flags.append("title_missing")
+    if not result.pdf_url:
+        flags.append("pdf_missing")
+    if plan.doi and result.doi and _normalize_doi(result.doi) != _normalize_doi(plan.doi):
+        flags.append("doi_mismatch")
+    dois = {
+        _normalize_doi(candidate.doi)
+        for candidate in candidates
+        if candidate.doi
+    }
+    if len(dois) > 1:
+        flags.append("conflicting_doi")
+    return tuple(_dedupe(flags))
+
+
+def _metadata_quality_score(
+    result: ReferenceLookupResult,
+    plan: ReferenceLookupPlan,
+    *,
+    review_flags: tuple[str, ...],
+) -> int:
+    score = 0
+    if result.doi:
+        score += 30
+    if result.title:
+        score += 20
+    if result.pdf_url:
+        score += 30
+    if plan.doi and result.doi:
+        if _normalize_doi(result.doi) == _normalize_doi(plan.doi):
+            score += 20
+        else:
+            score -= 20
+    if "conflicting_doi" in review_flags:
+        score -= 10
+    return max(0, min(100, score))
+
+
+def _try_publisher_pdf_fallback(
+    plan: ReferenceLookupPlan,
+    *,
+    best_result: ReferenceLookupResult,
+    cache_dir: Path,
+    http_client,
+) -> ReferenceLookupResult | None:
+    doi = best_result.doi or plan.doi
+    publisher_pdf_urls = _publisher_pdf_urls(doi)
+    for pdf_url in publisher_pdf_urls:
+        try:
+            pdf_bytes = http_client.download(pdf_url)
+        except Exception:
+            continue
+        if not _looks_like_pdf(pdf_bytes):
+            continue
+        cached_pdf_path = cache_dir / _safe_pdf_filename(doi or best_result.reference)
+        cached_pdf_path.write_bytes(pdf_bytes)
+        return _result_from_plan(
+            plan,
+            lookup_url=pdf_url,
+            doi=doi,
+            title=best_result.title,
+            pdf_url=pdf_url,
+            cached_pdf_path=cached_pdf_path,
+            status="downloaded",
+            metadata_source="publisher_pdf_fallback",
+            publisher_pdf_urls=publisher_pdf_urls,
+        )
+    return None
+
+
+def _publisher_pdf_urls(doi: str | None) -> tuple[str, ...]:
+    normalized = _normalize_doi(doi)
+    if not normalized:
+        return ()
+    suffix = normalized.split("/", 1)[1] if "/" in normalized else normalized
+    urls = []
+    if normalized.startswith("10.3390/"):
+        urls.append(f"https://www.mdpi.com/{normalized}/pdf")
+    if normalized.startswith("10.1371/"):
+        urls.append(f"https://journals.plos.org/plosone/article/file?id={normalized}&type=printable")
+    if normalized.startswith("10.3389/"):
+        urls.append(f"https://www.frontiersin.org/articles/{normalized}/pdf")
+    if normalized.startswith("10.1038/"):
+        urls.append(f"https://www.nature.com/articles/{suffix}.pdf")
+    if normalized.startswith(("10.1007/", "10.1186/")):
+        urls.append(f"https://link.springer.com/content/pdf/{normalized}.pdf")
+    if normalized.startswith("10.1002/"):
+        urls.append(f"https://onlinelibrary.wiley.com/doi/pdf/{normalized}")
+    if normalized.startswith("10.1021/"):
+        urls.append(f"https://pubs.acs.org/doi/pdf/{normalized}")
+    if normalized.startswith("10.1080/"):
+        urls.append(f"https://www.tandfonline.com/doi/pdf/{normalized}")
+    return tuple(_dedupe(urls))
+
+
+def _metadata_source_from_url(url: str) -> str:
+    if "api.openalex.org/works" in url:
+        return "openalex"
+    if "api.semanticscholar.org/graph/v1/paper" in url:
+        return "semantic_scholar"
+    if "api.crossref.org/works" in url:
+        return "crossref"
+    return "unknown"
 
 
 def _metadata_lookup_urls(plan: ReferenceLookupPlan) -> tuple[str, ...]:
@@ -362,6 +531,17 @@ def _safe_pdf_filename(value: str) -> str:
     stem = "".join(char if char.isalnum() else "-" for char in value.casefold())
     stem = re.sub(r"-+", "-", stem).strip("-") or "reference"
     return f"{stem}.pdf"
+
+
+def _normalize_doi(value: str | None) -> str | None:
+    cleaned = _clean_optional(value)
+    if not cleaned:
+        return None
+    return cleaned.removeprefix("https://doi.org/").removeprefix("doi:").lower()
+
+
+def _looks_like_pdf(value: bytes) -> bool:
+    return value.lstrip().startswith(b"%PDF")
 
 
 def _clean_optional(value: object) -> str | None:

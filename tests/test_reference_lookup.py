@@ -299,6 +299,97 @@ class ReferenceLookupTest(unittest.TestCase):
         self.assertEqual(client.download_urls, ["https://example.org/s2.pdf"])
         self.assertEqual(cached_bytes, b"%PDF-1.7 semantic scholar")
 
+    def test_lookup_tries_publisher_pdf_fallback_when_metadata_has_no_pdf(self):
+        class FakeHttpClient:
+            def __init__(self):
+                self.json_urls = []
+                self.download_urls = []
+
+            def get_json(self, url):
+                self.json_urls.append(url)
+                if "api.crossref.org" in url:
+                    return {"message": {"title": ["MDPI metadata"], "DOI": "10.3390/pharmaceutics12020123"}}
+                if "api.openalex.org" in url:
+                    return {"results": [{"title": "MDPI metadata", "doi": "https://doi.org/10.3390/pharmaceutics12020123"}]}
+                return {
+                    "title": "MDPI metadata",
+                    "externalIds": {"DOI": "10.3390/pharmaceutics12020123"},
+                }
+
+            def download(self, url):
+                self.download_urls.append(url)
+                return b"%PDF-1.7 mdpi fallback"
+
+        pack = build_knowledge_pack(
+            [
+                SlideEvidence(
+                    slide_id="slide-1",
+                    title="Publisher fallback",
+                    references=["Author et al. Pharmaceutics 2020 doi:10.3390/pharmaceutics12020123"],
+                )
+            ]
+        )
+        client = FakeHttpClient()
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            results = lookup_and_cache_references(
+                build_reference_lookup_plans(pack),
+                cache_dir=Path(tmpdir) / "reference_cache",
+                http_client=client,
+            )
+            payload = reference_lookup_results_to_dict(results)
+            cached_bytes = results[0].cached_pdf_path.read_bytes()
+
+        self.assertEqual(results[0].status, "downloaded")
+        self.assertEqual(results[0].metadata_source, "publisher_pdf_fallback")
+        self.assertEqual(client.download_urls, ["https://www.mdpi.com/10.3390/pharmaceutics12020123/pdf"])
+        self.assertEqual(results[0].pdf_url, "https://www.mdpi.com/10.3390/pharmaceutics12020123/pdf")
+        self.assertIn("https://www.mdpi.com/10.3390/pharmaceutics12020123/pdf", results[0].publisher_pdf_urls)
+        self.assertEqual(cached_bytes, b"%PDF-1.7 mdpi fallback")
+        self.assertEqual(payload["references"][0]["metadata_source"], "publisher_pdf_fallback")
+        self.assertIn("publisher_pdf_urls", payload["references"][0])
+
+    def test_lookup_prefers_matching_metadata_and_flags_conflicting_dois(self):
+        class FakeHttpClient:
+            def get_json(self, url):
+                if "api.crossref.org" in url:
+                    return {"message": {"title": ["Wrong metadata"], "DOI": "10.9999/wrong"}}
+                if "api.openalex.org" in url:
+                    return {"results": [{"title": "Matching metadata", "doi": "https://doi.org/10.5555/test"}]}
+                return {
+                    "title": "Semantic metadata",
+                    "externalIds": {"DOI": "10.5555/test"},
+                }
+
+            def download(self, url):
+                raise AssertionError("download should not be called without a PDF URL")
+
+        pack = build_knowledge_pack(
+            [
+                SlideEvidence(
+                    slide_id="slide-1",
+                    title="Conflicting metadata",
+                    references=["Author et al. Journal 2026 doi:10.5555/test"],
+                )
+            ]
+        )
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            results = lookup_and_cache_references(
+                build_reference_lookup_plans(pack),
+                cache_dir=Path(tmpdir) / "reference_cache",
+                http_client=FakeHttpClient(),
+            )
+            payload = reference_lookup_results_to_dict(results)
+
+        self.assertEqual(results[0].status, "metadata_found")
+        self.assertEqual(results[0].title, "Matching metadata")
+        self.assertEqual(results[0].metadata_source, "openalex")
+        self.assertIn("conflicting_doi", results[0].review_flags)
+        self.assertGreaterEqual(results[0].metadata_quality_score, 60)
+        self.assertIn("conflicting_doi", payload["references"][0]["review_flags"])
+        self.assertGreaterEqual(payload["references"][0]["metadata_quality_score"], 60)
+
 
 if __name__ == "__main__":
     unittest.main()
