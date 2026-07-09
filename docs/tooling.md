@@ -6,6 +6,8 @@ This project should keep OCR, PDF parsing, web search, STT, and LLM calls behind
 
 `src/stt_pipeline/local_whisper.py` is an optional command adapter for `mlx_whisper`; keep it as a fallback and do not add `mlx-whisper` as a hard runtime dependency.
 
+Optional integration tests live in `tests/test_optional_integrations.py`. They skip by default unless the relevant CLI is installed or `STT_RUN_LIVE_REFERENCE_TESTS=1` is set.
+
 ## Current Default Path
 
 Use the existing local PDF figure/table extraction workflow first:

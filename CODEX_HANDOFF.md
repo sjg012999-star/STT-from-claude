@@ -66,6 +66,7 @@ Live OpenAI STT is wired behind `OpenAiSttTranscriber`, local `mlx-whisper` is r
 - `tests/test_pdf_tools.py`: tests for PDF extraction command planning.
 - `tests/test_rich_summary.py`: tests for structured rich summary rendering and source-label rejection.
 - `tests/test_glossary.py`: tests for correction-pair glossary build/merge/read/write.
+- `tests/test_optional_integrations.py`: skipped-by-default checks for optional `mlx_whisper` and live Crossref lookup.
 - `docs/tooling.md`: GitHub/tooling candidates and integration rules.
 
 ## Next Implementation Order
