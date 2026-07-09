@@ -21,6 +21,7 @@
 - [x] 전처리 옵션, SRT 출력, OpenAI 교정 옵션, 기본 요약 출력
 - [x] OpenAI vision 기반 슬라이드 사진 OCR 옵션
 - [x] 명시적 PDF figure/table 추출 실행 옵션
+- [x] 세미나/강연/회의 프로필별 기본 요약 섹션
 - [x] Phase 1: MVP (CLI, 학회 프로필)
 - [ ] Phase 2: 회의/강연 프로필, 용어집 자동 누적
 - [ ] Phase 3: 웹 UI, 검수 도구
@@ -80,6 +81,7 @@ stt run sample.wav --profile seminar --provider gpt-4o --pack ./materials --ocr-
 ```
 
 `--preprocess`는 `ffmpeg`로 16kHz mono/loudness-normalized WAV를 만든 뒤 STT에 넘깁니다. `--correct`는 OpenAI Responses API에 구조화된 교정 JSON을 요청하고, 실제 세그먼트에 존재하는 원문만 바꿉니다. `--summarize`는 전사/교정 결과를 분리한 기본 Markdown 요약을 만듭니다.
+요약은 프로필별로 기본 섹션이 다릅니다: 세미나는 talk flow, 강연은 outline/key messages, 회의는 decisions/action items/needs review를 우선 만듭니다.
 
 긴 녹음은 교정 요청을 세그먼트 단위로 나눌 수 있습니다:
 

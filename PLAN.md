@@ -277,7 +277,7 @@ stt-conference/
 - [ ] Knowledge Pack 확장 3차: PDF 본문/figure/table 결과를 보강 노트에 자동 반영
 - [x] OpenAI 교정 계층 **기본**: structured outputs + 선언된 수정만 적용 + 거절 목록 기록
 - [x] 긴 전사용 청크 교정 옵션 + overlap provenance
-- [x] 기본 요약
+- [x] 프로필별 기본 요약: 세미나 talk flow, 강연 outline/key messages, 회의 decisions/action items
 - **완료 기준**: `stt run seminar.wav --profile seminar --pack ./materials/` 한 줄로 transcript.md 생성
 
 ### Phase 2 — 프로필 완성

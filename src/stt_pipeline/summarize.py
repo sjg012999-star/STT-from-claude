@@ -31,6 +31,7 @@ def build_basic_summary(
     lines = [
         f"# {title}",
         "",
+        *_profile_sections(result),
         "## Speaker Transcript",
         "",
         "_source: transcript_",
@@ -69,6 +70,43 @@ def build_basic_summary(
     )
 
 
+def _profile_sections(result: TranscriptResult) -> list[str]:
+    if result.profile == "lecture":
+        return [
+            "## Outline",
+            "",
+            *_segment_bullets(result),
+            "",
+            "## Key Messages",
+            "",
+            *_key_message_bullets(result),
+            "",
+        ]
+    if result.profile == "meeting":
+        return [
+            "## Decisions",
+            "",
+            *_decision_bullets(result),
+            "",
+            "## Action Items",
+            "",
+            *_action_item_bullets(result),
+            "",
+            "## Needs Review",
+            "",
+            "- Confirm decisions and owners against the original audio before acting.",
+            "",
+        ]
+    if result.profile == "seminar":
+        return [
+            "## Talk Flow",
+            "",
+            *_segment_bullets(result),
+            "",
+        ]
+    return []
+
+
 def _segment_bullets(result: TranscriptResult) -> list[str]:
     bullets = []
     for segment in result.segments[:8]:
@@ -82,3 +120,36 @@ def _segment_bullets(result: TranscriptResult) -> list[str]:
     if len(result.segments) > 8:
         bullets.append(f"- ... {len(result.segments) - 8} more segments omitted from basic summary.")
     return bullets
+
+
+def _key_message_bullets(result: TranscriptResult) -> list[str]:
+    selected = [
+        segment
+        for segment in result.segments
+        if any(marker in segment.text.casefold() for marker in ("key", "important", "conclusion", "takeaway"))
+    ]
+    if not selected:
+        selected = list(result.segments[:3])
+    return [f"- {segment.text}" for segment in selected[:5]]
+
+
+def _decision_bullets(result: TranscriptResult) -> list[str]:
+    decisions = [
+        segment
+        for segment in result.segments
+        if any(marker in segment.text.casefold() for marker in ("decided", "decision", "agreed", "approve"))
+    ]
+    if not decisions:
+        return ["- No explicit decision phrase detected in the transcript."]
+    return [f"- {segment.text}" for segment in decisions[:8]]
+
+
+def _action_item_bullets(result: TranscriptResult) -> list[str]:
+    actions = [
+        segment
+        for segment in result.segments
+        if any(marker in segment.text.casefold() for marker in ("action item", "will ", "todo", "follow up", "send "))
+    ]
+    if not actions:
+        return ["- No explicit action item phrase detected in the transcript."]
+    return [f"- {segment.text}" for segment in actions[:8]]
