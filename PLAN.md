@@ -242,6 +242,7 @@ stt-conference/
 │   ├── slide_ocr.py          # PPT/사진 OCR 및 figure/table crop 후보 추출
 │   ├── correct.py            # OpenAI 교정 + diff 검증
 │   ├── summarize.py          # 프로필별 요약
+│   ├── rich_summary.py       # OpenAI source-labeled rich summary
 │   ├── enrich.py             # 슬라이드-전사 정렬 + 보강 노트 (Phase 3)
 │   └── report.py             # md/json/srt 출력
 └── tests/
@@ -280,6 +281,7 @@ stt-conference/
 - [x] OpenAI 교정 계층 **기본**: structured outputs + 선언된 수정만 적용 + 거절 목록 기록
 - [x] 긴 전사용 청크 교정 옵션 + overlap provenance
 - [x] 프로필별 기본 요약: 세미나 talk flow, 강연 outline/key messages, 회의 decisions/action items
+- [x] OpenAI LLM 기반 source-labeled rich summary (`--llm-summarize`)
 - **완료 기준**: `stt run seminar.wav --profile seminar --pack ./materials/` 한 줄로 transcript.md 생성
 
 ### Phase 2 — 프로필 완성

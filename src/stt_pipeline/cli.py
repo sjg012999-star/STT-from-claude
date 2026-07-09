@@ -24,6 +24,7 @@ from stt_pipeline.reference_lookup import (
     build_reference_lookup_plans,
     reference_lookup_plans_to_dict,
 )
+from stt_pipeline.rich_summary import OpenAiRichSummarizer
 from stt_pipeline.stt_provider import OpenAiSttTranscriber
 from stt_pipeline.summarize import build_basic_summary
 from stt_pipeline.transcript import TranscriptResult
@@ -36,6 +37,7 @@ def main(
     transcriber=None,
     corrector=None,
     image_ocr=None,
+    summarizer=None,
     command_runner=None,
 ) -> int:
     parser = _build_parser()
@@ -48,6 +50,7 @@ def main(
             active_transcriber,
             corrector=corrector,
             image_ocr=image_ocr,
+            summarizer=summarizer,
             command_runner=command_runner,
         )
     if args.command == "bakeoff":
@@ -81,6 +84,7 @@ def _build_parser() -> argparse.ArgumentParser:
     transcribe.add_argument("--correction-chunk-size", type=int)
     transcribe.add_argument("--correction-overlap", type=int, default=1)
     transcribe.add_argument("--summarize", action="store_true")
+    transcribe.add_argument("--llm-summarize", action="store_true")
     transcribe.add_argument("--enrich-notes", action="store_true")
     transcribe.add_argument("--output", required=True)
 
@@ -100,6 +104,7 @@ def _build_parser() -> argparse.ArgumentParser:
     run.add_argument("--correction-chunk-size", type=int)
     run.add_argument("--correction-overlap", type=int, default=1)
     run.add_argument("--summarize", action="store_true")
+    run.add_argument("--llm-summarize", action="store_true")
     run.add_argument("--enrich-notes", action="store_true")
     run.add_argument("--output", required=True)
 
@@ -126,6 +131,7 @@ def _run_transcribe(
     *,
     corrector=None,
     image_ocr=None,
+    summarizer=None,
     command_runner=None,
 ) -> int:
     output_dir = Path(args.output)
@@ -156,6 +162,17 @@ def _run_transcribe(
     )
     if getattr(args, "summarize", False):
         _write_summary(output_dir / "summary.md", summary_source, correction_report)
+    if getattr(args, "llm_summarize", False):
+        _write_rich_summary(
+            output_dir / "rich_summary.md",
+            summary_source,
+            terms,
+            material_pack=pack,
+            pdf_results=pdf_results,
+            reference_lookup_plans=reference_lookup_plans,
+            correction_report=correction_report,
+            summarizer=summarizer,
+        )
     if getattr(args, "enrich_notes", False):
         _write_enriched_notes(
             output_dir / "notes.md",
@@ -172,6 +189,7 @@ def _run_transcribe(
         result=result,
         corrected=correction_report is not None,
         summarized=getattr(args, "summarize", False),
+        llm_summarized=getattr(args, "llm_summarize", False),
         reference_lookup_planned=getattr(args, "plan_reference_search", False),
         correction_manifest=_correction_manifest(args),
     )
@@ -366,6 +384,29 @@ def _write_summary(
     path.write_text(summary.markdown, encoding="utf-8")
 
 
+def _write_rich_summary(
+    path: Path,
+    result: TranscriptResult,
+    terms: tuple[str, ...],
+    *,
+    material_pack,
+    pdf_results,
+    reference_lookup_plans,
+    correction_report: CorrectionReport | None,
+    summarizer,
+) -> None:
+    active_summarizer = summarizer or OpenAiRichSummarizer()
+    summary = active_summarizer.summarize(
+        result,
+        prompt_terms=terms,
+        material_pack=material_pack,
+        pdf_results=pdf_results,
+        reference_lookup_plans=reference_lookup_plans,
+        correction_report=correction_report,
+    )
+    path.write_text(summary.markdown, encoding="utf-8")
+
+
 def _write_enriched_notes(
     path: Path,
     result: TranscriptResult,
@@ -392,6 +433,7 @@ def _write_run_manifest(
     result: TranscriptResult,
     corrected: bool,
     summarized: bool,
+    llm_summarized: bool,
     reference_lookup_planned: bool,
     correction_manifest: dict[str, object],
 ) -> None:
@@ -406,6 +448,7 @@ def _write_run_manifest(
                 "profile": result.profile,
                 "corrected": corrected,
                 "summarized": summarized,
+                "llm_summarized": llm_summarized,
                 "reference_lookup_planned": reference_lookup_planned,
                 "correction": correction_manifest,
             },

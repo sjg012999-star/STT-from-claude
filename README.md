@@ -24,6 +24,7 @@
 - [x] 명시적 PDF figure/table 추출 실행 옵션
 - [x] 세미나/강연/회의 프로필별 기본 요약 섹션
 - [x] source label 기반 `notes.md` 보강 노트 출력
+- [x] OpenAI LLM 기반 source-labeled `rich_summary.md` 출력 옵션
 - [x] Phase 1: MVP (CLI, 학회 프로필)
 - [ ] Phase 2: 회의/강연 프로필, 용어집 자동 누적
 - [ ] Phase 3: 웹 UI, 검수 도구
@@ -87,10 +88,11 @@ stt run sample.wav --profile seminar --provider gpt-4o --pack ./materials --plan
 전처리, 교정, 요약까지 포함:
 
 ```bash
-stt run sample.wav --profile seminar --provider gpt-4o --pack ./materials --ocr-images --preprocess --correct --summarize --plan-reference-search --enrich-notes --output out/seminar
+stt run sample.wav --profile seminar --provider gpt-4o --pack ./materials --ocr-images --preprocess --correct --summarize --llm-summarize --plan-reference-search --enrich-notes --output out/seminar
 ```
 
 `--preprocess`는 `ffmpeg`로 16kHz mono/loudness-normalized WAV를 만든 뒤 STT에 넘깁니다. `--correct`는 OpenAI Responses API에 구조화된 교정 JSON을 요청하고, 실제 세그먼트에 존재하는 원문만 바꿉니다. `--summarize`는 전사/교정 결과를 분리한 기본 Markdown 요약을 만듭니다.
+`--llm-summarize`는 OpenAI Responses API로 source label이 있는 `rich_summary.md`를 추가 생성합니다. source label이 없거나 허용되지 않은 label이 오면 실패시켜 전사/슬라이드/PDF/추가조사 근거가 섞이지 않게 합니다.
 요약은 프로필별로 기본 섹션이 다릅니다: 세미나는 talk flow, 강연은 outline/key messages, 회의는 decisions/action items/needs review를 우선 만듭니다.
 
 긴 녹음은 교정 요청을 세그먼트 단위로 나눌 수 있습니다:
@@ -113,6 +115,7 @@ stt transcribe sample.wav --profile seminar --provider gpt-4o --terms-file terms
 - `corrected_transcript.md` / `corrected_transcript.json` / `corrected_transcript.srt` (`--correct`)
 - `corrections.json` (`--correct`)
 - `summary.md` (`--summarize`)
+- `rich_summary.md` (`--llm-summarize`)
 - `notes.md` (`--enrich-notes`)
 - `prompt_terms.txt`, `knowledge_pack.json`, `run_manifest.json`
 - `reference_lookup_jobs.json` (`--plan-reference-search`)

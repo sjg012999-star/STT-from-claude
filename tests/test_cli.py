@@ -97,6 +97,39 @@ class FakeImageOcr:
         )
 
 
+class FakeRichSummarizer:
+    def __init__(self):
+        self.calls = []
+
+    def summarize(
+        self,
+        result,
+        *,
+        prompt_terms=(),
+        material_pack=None,
+        pdf_results=(),
+        reference_lookup_plans=(),
+        correction_report=None,
+    ):
+        from stt_pipeline.rich_summary import RichSummaryResult
+
+        self.calls.append(
+            {
+                "result": result,
+                "prompt_terms": tuple(prompt_terms),
+                "material_pack": material_pack,
+                "pdf_results": tuple(pdf_results),
+                "reference_lookup_plans": tuple(reference_lookup_plans),
+                "correction_report": correction_report,
+            }
+        )
+        return RichSummaryResult(
+            markdown="# Rich Summary\n\n## Key Findings\n\n- [speaker_transcript] Test rich summary. _(evidence: seg_001)_\n",
+            section_count=1,
+            item_count=1,
+        )
+
+
 class CliTest(unittest.TestCase):
     def test_transcribe_writes_json_and_markdown_with_terms(self):
         transcriber = FakeTranscriber()
@@ -515,6 +548,39 @@ class CliTest(unittest.TestCase):
             "10.1038/s41575-024-00913-8",
         )
         self.assertIn("https://doi.org/10.1038/s41575-024-00913-8", notes)
+
+    def test_run_can_write_llm_rich_summary_with_source_labels(self):
+        transcriber = FakeTranscriber()
+        summarizer = FakeRichSummarizer()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            audio_path = root / "sample.wav"
+            output_dir = root / "out"
+            audio_path.write_bytes(b"fake audio")
+
+            exit_code = main(
+                [
+                    "run",
+                    str(audio_path),
+                    "--profile",
+                    "seminar",
+                    "--provider",
+                    "gpt-4o",
+                    "--llm-summarize",
+                    "--output",
+                    str(output_dir),
+                ],
+                transcriber=transcriber,
+                summarizer=summarizer,
+            )
+
+            rich_summary = (output_dir / "rich_summary.md").read_text(encoding="utf-8")
+            manifest = json.loads((output_dir / "run_manifest.json").read_text(encoding="utf-8"))
+
+        self.assertEqual(exit_code, 0)
+        self.assertIn("# Rich Summary", rich_summary)
+        self.assertEqual(len(summarizer.calls), 1)
+        self.assertTrue(manifest["llm_summarized"])
 
 
 if __name__ == "__main__":
