@@ -17,11 +17,24 @@
 - [x] Phase 1 Knowledge Pack 우선순위 스캐폴드 → `src/stt_pipeline/knowledge_pack.py`
 - [x] OCR 텍스트/레퍼런스 PDF 추출 어댑터 경계 → `src/stt_pipeline/slide_extract.py`, `src/stt_pipeline/pdf_tools.py`
 - [x] OpenAI STT adapter + provider bakeoff CLI → `src/stt_pipeline/stt_provider.py`, `src/stt_pipeline/cli.py`
+- [x] `stt run ... --pack ./materials` 기본 실행 흐름 → 텍스트/PPTX/OCR JSON 자료에서 STT prompt terms 생성
 - [ ] Phase 1: MVP (CLI, 학회 프로필)
 - [ ] Phase 2: 회의/강연 프로필, 용어집 자동 누적
 - [ ] Phase 3: 웹 UI, 검수 도구
 
 ## CLI Preview
+
+초기 1회 설치:
+
+```bash
+python3 -m pip install -e .
+```
+
+API 키 설정:
+
+```bash
+export OPENAI_API_KEY="..."
+```
 
 자료 없이 전사:
 
@@ -29,7 +42,15 @@
 stt transcribe sample.wav --profile seminar --provider gpt-4o --output out/seminar
 ```
 
-자료에서 뽑은 용어 힌트만 추가:
+보강자료 폴더를 같이 넣어 한 번에 전사:
+
+```bash
+stt run sample.wav --profile seminar --provider gpt-4o --pack ./materials --output out/seminar
+```
+
+이후에는 녹음파일, 보강자료 폴더, `OPENAI_API_KEY`만 준비하면 됩니다. `--pack`은 현재 `.txt`, `.md`, `.pptx`, 슬라이드 OCR 결과 `.json`을 읽어 `prompt_terms.txt`와 `knowledge_pack.json`을 출력합니다. 원본 슬라이드 사진과 PDF 직접 OCR/파싱은 아직 자동 실행하지 않으며, 해당 파일이 있으면 출력 JSON의 `warnings`에 남깁니다.
+
+직접 만든 용어 힌트 파일만 추가:
 
 ```bash
 stt transcribe sample.wav --profile seminar --provider gpt-4o --terms-file terms.txt --output out/seminar

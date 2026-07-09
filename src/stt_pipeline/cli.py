@@ -6,6 +6,7 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Iterable, Sequence
 
+from stt_pipeline.materials import load_material_pack, material_pack_to_dict
 from stt_pipeline.stt_provider import OpenAiSttTranscriber
 from stt_pipeline.transcript import TranscriptResult
 
@@ -15,7 +16,7 @@ def main(argv: Sequence[str] | None = None, *, transcriber=None) -> int:
     args = parser.parse_args(argv)
     active_transcriber = transcriber or OpenAiSttTranscriber()
 
-    if args.command == "transcribe":
+    if args.command in {"transcribe", "run"}:
         return _run_transcribe(args, active_transcriber)
     if args.command == "bakeoff":
         return _run_bakeoff(args, active_transcriber)
@@ -32,13 +33,23 @@ def _build_parser() -> argparse.ArgumentParser:
     transcribe.add_argument("--profile", default="seminar")
     transcribe.add_argument("--provider")
     transcribe.add_argument("--terms-file")
+    transcribe.add_argument("--pack", "--materials", action="append", dest="pack_paths")
     transcribe.add_argument("--output", required=True)
+
+    run = subparsers.add_parser("run")
+    run.add_argument("audio_path")
+    run.add_argument("--profile", default="seminar")
+    run.add_argument("--provider")
+    run.add_argument("--terms-file")
+    run.add_argument("--pack", "--materials", action="append", dest="pack_paths")
+    run.add_argument("--output", required=True)
 
     bakeoff = subparsers.add_parser("bakeoff")
     bakeoff.add_argument("audio_path")
     bakeoff.add_argument("--profile", default="seminar")
     bakeoff.add_argument("--providers", required=True)
     bakeoff.add_argument("--terms-file")
+    bakeoff.add_argument("--pack", "--materials", action="append", dest="pack_paths")
     bakeoff.add_argument("--output", required=True)
 
     return parser
@@ -47,7 +58,7 @@ def _build_parser() -> argparse.ArgumentParser:
 def _run_transcribe(args, transcriber) -> int:
     output_dir = Path(args.output)
     output_dir.mkdir(parents=True, exist_ok=True)
-    terms = _read_terms(args.terms_file)
+    terms = _load_prompt_terms(args, output_dir)
     result = transcriber.transcribe(
         args.audio_path,
         provider=args.provider,
@@ -63,7 +74,7 @@ def _run_transcribe(args, transcriber) -> int:
 def _run_bakeoff(args, transcriber) -> int:
     output_dir = Path(args.output)
     output_dir.mkdir(parents=True, exist_ok=True)
-    terms = _read_terms(args.terms_file)
+    terms = _load_prompt_terms(args, output_dir)
     providers = tuple(value.strip() for value in args.providers.split(",") if value.strip())
     results = []
 
@@ -81,6 +92,20 @@ def _run_bakeoff(args, transcriber) -> int:
     return 0
 
 
+def _load_prompt_terms(args, output_dir: Path) -> tuple[str, ...]:
+    terms = list(_read_terms(args.terms_file))
+    pack_paths = tuple(getattr(args, "pack_paths", None) or ())
+    if pack_paths:
+        pack = load_material_pack(pack_paths)
+        terms.extend(pack.prompt_terms)
+        _write_material_pack(output_dir / "knowledge_pack.json", pack)
+
+    prompt_terms = _dedupe_terms(terms)
+    if prompt_terms:
+        _write_prompt_terms(output_dir / "prompt_terms.txt", prompt_terms)
+    return prompt_terms
+
+
 def _read_terms(terms_file: str | None) -> tuple[str, ...]:
     if not terms_file:
         return ()
@@ -93,6 +118,17 @@ def _write_result_json(path: Path, result: TranscriptResult) -> None:
         json.dumps(asdict(result), ensure_ascii=False, indent=2),
         encoding="utf-8",
     )
+
+
+def _write_material_pack(path: Path, pack) -> None:
+    path.write_text(
+        json.dumps(material_pack_to_dict(pack), ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+
+
+def _write_prompt_terms(path: Path, terms: tuple[str, ...]) -> None:
+    path.write_text("\n".join(terms) + "\n", encoding="utf-8")
 
 
 def _write_result_markdown(path: Path, result: TranscriptResult) -> None:
@@ -143,6 +179,18 @@ def _write_bakeoff_report(
 def _count_term_hits(text: str, terms: tuple[str, ...]) -> int:
     lowered = text.casefold()
     return sum(1 for term in terms if term.casefold() in lowered)
+
+
+def _dedupe_terms(terms: Iterable[str]) -> tuple[str, ...]:
+    result = []
+    seen = set()
+    for term in terms:
+        cleaned = " ".join(str(term).split())
+        key = cleaned.casefold()
+        if cleaned and key not in seen:
+            seen.add(key)
+            result.append(cleaned)
+    return tuple(result)
 
 
 def _format_time_range(start: float | None, end: float | None) -> str:

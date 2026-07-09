@@ -109,6 +109,49 @@ class CliTest(unittest.TestCase):
         self.assertIn("whisper-1", report)
         self.assertIn("gpt-4o-mini", report)
 
+    def test_run_uses_material_pack_and_writes_prompt_terms(self):
+        transcriber = FakeTranscriber()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            audio_path = root / "seminar.wav"
+            materials_dir = root / "materials"
+            output_dir = root / "out"
+            audio_path.write_bytes(b"fake audio")
+            materials_dir.mkdir()
+            (materials_dir / "slides.md").write_text(
+                "\n".join(
+                    [
+                        "Using InTesTinyTM for targeted nanoparticle design",
+                        "NHS-PEG5k-cRGD cyclo(Arg-Gly-Asp-D-Tyr-Lys) was compared across healthy and IBD intestinal media.",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+
+            exit_code = main(
+                [
+                    "run",
+                    str(audio_path),
+                    "--profile",
+                    "seminar",
+                    "--provider",
+                    "gpt-4o",
+                    "--pack",
+                    str(materials_dir),
+                    "--output",
+                    str(output_dir),
+                ],
+                transcriber=transcriber,
+            )
+
+            prompt_terms = (output_dir / "prompt_terms.txt").read_text(encoding="utf-8")
+            pack_json = json.loads((output_dir / "knowledge_pack.json").read_text(encoding="utf-8"))
+
+        self.assertEqual(exit_code, 0)
+        self.assertIn("InTesTinyTM", transcriber.calls[0]["prompt_terms"])
+        self.assertIn("NHS-PEG5k-cRGD", prompt_terms)
+        self.assertEqual(pack_json["slide_count"], 1)
+
 
 if __name__ == "__main__":
     unittest.main()
