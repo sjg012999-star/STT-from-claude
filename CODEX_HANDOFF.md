@@ -56,7 +56,7 @@ Live OpenAI STT is wired behind `OpenAiSttTranscriber`, local `mlx-whisper` is r
 - `src/stt_pipeline/vision_ocr.py`: OpenAI vision slide-photo OCR adapter using Responses API image inputs.
 - `src/stt_pipeline/cli.py`: `run`, `transcribe`, and `bakeoff` command handlers.
 - `src/stt_pipeline/slide_extract.py`: OCR-text-to-slide-evidence heuristics.
-- `src/stt_pipeline/reference_lookup.py`: DOI/Crossref/OpenAlex lookup planning plus Crossref metadata/open PDF cache adapter.
+- `src/stt_pipeline/reference_lookup.py`: DOI/Crossref/OpenAlex lookup planning plus Crossref/OpenAlex metadata and open PDF cache adapter.
 - `src/stt_pipeline/pdf_tools.py`: command builder for the existing PDF figure/table extraction script.
 - `tests/test_knowledge_pack.py`: tests for prioritization, PDF extraction jobs, and transcript-slide alignment.
 - `tests/test_local_whisper.py`: tests for optional `mlx_whisper` command planning and JSON normalization.
@@ -66,12 +66,12 @@ Live OpenAI STT is wired behind `OpenAiSttTranscriber`, local `mlx-whisper` is r
 - `tests/test_pdf_tools.py`: tests for PDF extraction command planning.
 - `tests/test_rich_summary.py`: tests for structured rich summary rendering and source-label rejection.
 - `tests/test_glossary.py`: tests for correction-pair glossary build/merge/read/write.
-- `tests/test_optional_integrations.py`: skipped-by-default checks for optional `mlx_whisper` and live Crossref lookup.
+- `tests/test_optional_integrations.py`: skipped-by-default checks for optional `mlx_whisper` and live reference lookup.
 - `docs/tooling.md`: GitHub/tooling candidates and integration rules.
 
 ## Next Implementation Order
 
-1. Add Semantic Scholar/OpenAlex fallback and publisher-specific PDF fallback behind `reference_lookup.py`.
+1. Add Semantic Scholar and publisher-specific PDF fallback behind `reference_lookup.py`.
 2. Add skipped integration tests for optional reference/PDF/tools before making them default.
 3. Add glossary accumulation from accepted corrections.
 
@@ -81,7 +81,7 @@ The STT router supports `gpt-4o`, `gpt-4o-mini`, `whisper-1`, `diarize`, and `ml
 Use `--provider mlx-whisper` only when the local `mlx_whisper` CLI is installed. Configure it with `MLX_WHISPER_COMMAND` and `MLX_WHISPER_MODEL`; it is an offline fallback, not the default quality path.
 `stt run ... --pack ./materials` now merges `--terms-file` with prompt terms extracted from `.txt`, `.md`, `.pptx`, slide OCR `.json`, and slide photos when `--ocr-images` is passed. PDFs are not mixed into prompt terms; they are tracked as `pdf_sources` and can be processed with `--extract-pdfs --pdf-extractor-script ...`.
 Use `--plan-reference-search` to write `reference_lookup_jobs.json` with DOI, Crossref, OpenAlex, and DOI URL candidates. This does not perform network lookup or download.
-Use `--lookup-references` to perform live Crossref metadata lookup and cache open PDF links into `reference_cache/*.pdf`. It also writes `reference_lookup_results.json`; when combined with `--extract-pdfs`, cached PDFs are passed to the figure/table extraction workflow.
+Use `--lookup-references` to perform live Crossref/OpenAlex metadata lookup and cache open PDF links into `reference_cache/*.pdf`. It also writes `reference_lookup_results.json`; when combined with `--extract-pdfs`, cached PDFs are passed to the figure/table extraction workflow.
 Use `--preprocess` to run ffmpeg before STT. Use `--correct` only when `OPENAI_MODEL` is set; it asks for structured correction JSON and applies only exact declared replacements. Use `--summarize` for the basic Markdown summary.
 Use `--chunk-audio --chunk-seconds 600` for long recordings that may exceed STT file upload limits. Chunking runs after preprocessing, writes `audio_chunks/chunk_*.wav`, transcribes each chunk, and offsets timestamps before writing the combined transcript.
 Use `--correction-chunk-size` and `--correction-overlap` for long recordings; chunk provenance is written to `corrections.json` and `run_manifest.json`.

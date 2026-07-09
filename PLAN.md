@@ -279,7 +279,7 @@ stt-conference/
 - [x] Knowledge Pack **기본**: 텍스트/PPTX/OCR JSON 자료 → 용어 주입 (`--terms-file`과 병합)
 - [x] Knowledge Pack 확장 1차: 원본 슬라이드 사진 OCR 옵션 (`--ocr-images`)
 - [x] Knowledge Pack 확장 2차: 레퍼런스 DOI/검색 URL 계획 출력 (`--plan-reference-search`)
-- [x] Knowledge Pack 확장 3차: Crossref metadata 조회 + open PDF cache (`--lookup-references`)
+- [x] Knowledge Pack 확장 3차: Crossref/OpenAlex metadata 조회 + open PDF cache (`--lookup-references`)
 - [x] Knowledge Pack 확장 4차: 명시적 PDF figure/table 추출 CLI 연결 (`--extract-pdfs`)
 - [x] Knowledge Pack 확장 5차: PDF 추출 결과와 자료 근거를 source label 기반 `notes.md`에 반영
 - [x] OpenAI 교정 계층 **기본**: structured outputs + 선언된 수정만 적용 + 거절 목록 기록

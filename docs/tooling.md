@@ -2,7 +2,7 @@
 
 This project should keep OCR, PDF parsing, web search, STT, and LLM calls behind adapters. Tests should use deterministic fixtures, not live services or paid APIs.
 
-`src/stt_pipeline/reference_lookup.py` creates deterministic DOI/Crossref/OpenAlex lookup plans and can, behind `--lookup-references`, perform Crossref metadata lookup plus open PDF caching. Tests use fake HTTP clients; do not add live network tests to the default suite.
+`src/stt_pipeline/reference_lookup.py` creates deterministic DOI/Crossref/OpenAlex lookup plans and can, behind `--lookup-references`, perform Crossref/OpenAlex metadata lookup plus open PDF caching. Tests use fake HTTP clients; do not add live network tests to the default suite.
 
 `src/stt_pipeline/local_whisper.py` is an optional command adapter for `mlx_whisper`; keep it as a fallback and do not add `mlx-whisper` as a hard runtime dependency.
 

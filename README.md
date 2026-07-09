@@ -22,7 +22,7 @@
 - [x] 전처리 옵션, 긴 녹음 chunking 옵션, SRT 출력, OpenAI 교정 옵션, 기본 요약 출력
 - [x] OpenAI vision 기반 슬라이드 사진 OCR 옵션
 - [x] 레퍼런스 DOI/검색 URL 계획 출력 옵션
-- [x] Crossref 기반 레퍼런스 조회 및 open PDF cache 옵션
+- [x] Crossref/OpenAlex 기반 레퍼런스 조회 및 open PDF cache 옵션
 - [x] 명시적 PDF figure/table 추출 실행 옵션
 - [x] 세미나/강연/회의 프로필별 기본 요약 섹션
 - [x] 적용된 교정쌍을 TSV glossary로 저장/재사용
@@ -102,7 +102,7 @@ stt run sample.wav --profile seminar --provider gpt-4o --pack ./materials --plan
 stt run sample.wav --profile seminar --provider gpt-4o --pack ./materials --lookup-references --output out/seminar
 ```
 
-`--lookup-references`는 실제 네트워크 조회를 수행합니다. 현재는 Crossref metadata에서 title/DOI/open PDF 링크를 찾고, PDF 링크가 있으면 `reference_cache/*.pdf`로 저장한 뒤 `reference_lookup_results.json`에 남깁니다. `--lookup-references --extract-pdfs --pdf-extractor-script ...`를 같이 쓰면 cache된 PDF가 기존 figure/table 추출 입력으로 바로 연결됩니다.
+`--lookup-references`는 실제 네트워크 조회를 수행합니다. 현재는 Crossref를 먼저 보고, PDF가 없거나 조회가 실패하면 OpenAlex 후보까지 확인합니다. open PDF 링크가 있으면 `reference_cache/*.pdf`로 저장한 뒤 `reference_lookup_results.json`에 남깁니다. `--lookup-references --extract-pdfs --pdf-extractor-script ...`를 같이 쓰면 cache된 PDF가 기존 figure/table 추출 입력으로 바로 연결됩니다.
 
 전처리, 교정, 요약까지 포함:
 

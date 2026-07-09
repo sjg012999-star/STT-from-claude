@@ -155,6 +155,100 @@ class ReferenceLookupTest(unittest.TestCase):
         self.assertEqual(results[0].status, "metadata_found")
         self.assertEqual(results[0].cached_pdf_path, None)
 
+    def test_lookup_falls_back_to_openalex_when_crossref_has_no_pdf(self):
+        class FakeHttpClient:
+            def __init__(self):
+                self.json_urls = []
+                self.download_urls = []
+
+            def get_json(self, url):
+                self.json_urls.append(url)
+                if "api.crossref.org" in url:
+                    return {"message": {"title": ["Crossref title"], "DOI": "10.1000/test"}}
+                return {
+                    "results": [
+                        {
+                            "title": "OpenAlex title",
+                            "doi": "https://doi.org/10.1000/test",
+                            "primary_location": {
+                                "pdf_url": "https://example.org/openalex.pdf",
+                            },
+                        }
+                    ]
+                }
+
+            def download(self, url):
+                self.download_urls.append(url)
+                return b"%PDF-1.7 from openalex"
+
+        pack = build_knowledge_pack(
+            [
+                SlideEvidence(
+                    slide_id="slide-1",
+                    title="Fallback",
+                    references=["Author et al. Journal 2026 doi:10.1000/test"],
+                )
+            ]
+        )
+        client = FakeHttpClient()
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            results = lookup_and_cache_references(
+                build_reference_lookup_plans(pack),
+                cache_dir=Path(tmpdir) / "reference_cache",
+                http_client=client,
+            )
+            cached_bytes = results[0].cached_pdf_path.read_bytes()
+
+        self.assertEqual(results[0].status, "downloaded")
+        self.assertEqual(results[0].title, "OpenAlex title")
+        self.assertIn("api.crossref.org", client.json_urls[0])
+        self.assertIn("api.openalex.org", client.json_urls[1])
+        self.assertEqual(client.download_urls, ["https://example.org/openalex.pdf"])
+        self.assertEqual(cached_bytes, b"%PDF-1.7 from openalex")
+
+    def test_lookup_falls_back_to_openalex_when_crossref_errors(self):
+        class FakeHttpClient:
+            def __init__(self):
+                self.json_urls = []
+
+            def get_json(self, url):
+                self.json_urls.append(url)
+                if "api.crossref.org" in url:
+                    raise RuntimeError("crossref unavailable")
+                return {
+                    "results": [
+                        {
+                            "title": "OpenAlex metadata",
+                            "doi": "https://doi.org/10.1000/test",
+                        }
+                    ]
+                }
+
+            def download(self, url):
+                raise AssertionError("download should not be called without a PDF URL")
+
+        pack = build_knowledge_pack(
+            [
+                SlideEvidence(
+                    slide_id="slide-1",
+                    title="Fallback",
+                    references=["Author et al. Journal 2026 doi:10.1000/test"],
+                )
+            ]
+        )
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            results = lookup_and_cache_references(
+                build_reference_lookup_plans(pack),
+                cache_dir=Path(tmpdir) / "reference_cache",
+                http_client=FakeHttpClient(),
+            )
+
+        self.assertEqual(results[0].status, "metadata_found")
+        self.assertEqual(results[0].title, "OpenAlex metadata")
+        self.assertIsNone(results[0].error)
+
 
 if __name__ == "__main__":
     unittest.main()

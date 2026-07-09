@@ -26,9 +26,9 @@ class OptionalIntegrationsTest(unittest.TestCase):
 
     @unittest.skipUnless(
         os.environ.get("STT_RUN_LIVE_REFERENCE_TESTS") == "1",
-        "set STT_RUN_LIVE_REFERENCE_TESTS=1 to run live Crossref lookup",
+        "set STT_RUN_LIVE_REFERENCE_TESTS=1 to run live reference lookup",
     )
-    def test_live_crossref_lookup_can_resolve_reference_metadata(self):
+    def test_live_reference_lookup_can_resolve_reference_metadata(self):
         pack = build_knowledge_pack(
             [
                 SlideEvidence(

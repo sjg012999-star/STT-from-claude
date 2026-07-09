@@ -151,35 +151,61 @@ def _lookup_one(
     cache_dir: Path,
     http_client,
 ) -> ReferenceLookupResult:
-    lookup_url = _metadata_lookup_url(plan)
-    if lookup_url is None:
+    lookup_urls = _metadata_lookup_urls(plan)
+    if not lookup_urls:
         return _result_from_plan(plan, lookup_url=None, status="needs_lookup")
-    try:
-        payload = http_client.get_json(lookup_url)
-        metadata = _metadata_from_payload(payload)
-        pdf_url = metadata.get("pdf_url")
-        cached_pdf_path = None
-        status = "metadata_found"
-        if pdf_url:
-            cached_pdf_path = cache_dir / _safe_pdf_filename(metadata.get("doi") or plan.doi or plan.reference)
-            cached_pdf_path.write_bytes(http_client.download(pdf_url))
-            status = "downloaded"
-        return _result_from_plan(
-            plan,
-            lookup_url=lookup_url,
-            doi=metadata.get("doi") or plan.doi,
-            title=metadata.get("title"),
-            pdf_url=pdf_url,
-            cached_pdf_path=cached_pdf_path,
-            status=status,
-        )
-    except Exception as exc:  # pragma: no cover - exercised through fake clients in tests when needed.
-        return _result_from_plan(
-            plan,
-            lookup_url=lookup_url,
-            status="lookup_failed",
-            error=str(exc),
-        )
+    best_result: ReferenceLookupResult | None = None
+    errors = []
+    for lookup_url in lookup_urls:
+        try:
+            result = _lookup_metadata_url(
+                plan,
+                lookup_url=lookup_url,
+                cache_dir=cache_dir,
+                http_client=http_client,
+            )
+        except Exception as exc:  # pragma: no cover - fake clients cover the fallback behavior.
+            errors.append(f"{lookup_url}: {exc}")
+            continue
+        if result.status == "downloaded":
+            return result
+        if best_result is None:
+            best_result = result
+    if best_result is not None:
+        return best_result
+    return _result_from_plan(
+        plan,
+        lookup_url=lookup_urls[0],
+        status="lookup_failed",
+        error="; ".join(errors) if errors else None,
+    )
+
+
+def _lookup_metadata_url(
+    plan: ReferenceLookupPlan,
+    *,
+    lookup_url: str,
+    cache_dir: Path,
+    http_client,
+) -> ReferenceLookupResult:
+    payload = http_client.get_json(lookup_url)
+    metadata = _metadata_from_payload(payload)
+    pdf_url = metadata.get("pdf_url")
+    cached_pdf_path = None
+    status = "metadata_found"
+    if pdf_url:
+        cached_pdf_path = cache_dir / _safe_pdf_filename(metadata.get("doi") or plan.doi or plan.reference)
+        cached_pdf_path.write_bytes(http_client.download(pdf_url))
+        status = "downloaded"
+    return _result_from_plan(
+        plan,
+        lookup_url=lookup_url,
+        doi=metadata.get("doi") or plan.doi,
+        title=metadata.get("title"),
+        pdf_url=pdf_url,
+        cached_pdf_path=cached_pdf_path,
+        status=status,
+    )
 
 
 def _result_from_plan(
@@ -208,11 +234,18 @@ def _result_from_plan(
     )
 
 
-def _metadata_lookup_url(plan: ReferenceLookupPlan) -> str | None:
+def _metadata_lookup_urls(plan: ReferenceLookupPlan) -> tuple[str, ...]:
+    exact_crossref = []
+    openalex = []
+    broad_crossref = []
     for url in plan.search_urls:
-        if "api.crossref.org/works" in url:
-            return url
-    return plan.search_urls[0] if plan.search_urls else None
+        if "api.openalex.org/works" in url:
+            openalex.append(url)
+        elif "api.crossref.org/works" in url and "query.bibliographic" in url:
+            broad_crossref.append(url)
+        elif "api.crossref.org/works" in url:
+            exact_crossref.append(url)
+    return tuple(_dedupe([*exact_crossref, *openalex, *broad_crossref]))
 
 
 def _metadata_from_payload(payload: dict[str, Any]) -> dict[str, str | None]:
