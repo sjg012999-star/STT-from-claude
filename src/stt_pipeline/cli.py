@@ -12,6 +12,7 @@ from stt_pipeline.correct import (
     correction_report_to_dict,
 )
 from stt_pipeline.materials import load_material_pack, material_pack_to_dict
+from stt_pipeline.notes import build_enriched_notes
 from stt_pipeline.pdf_tools import (
     FigureTableExtractorConfig,
     pdf_extraction_results_to_dict,
@@ -19,6 +20,10 @@ from stt_pipeline.pdf_tools import (
 )
 from stt_pipeline.preprocess import build_preprocess_plan, preprocess_audio
 from stt_pipeline.report import render_srt
+from stt_pipeline.reference_lookup import (
+    build_reference_lookup_plans,
+    reference_lookup_plans_to_dict,
+)
 from stt_pipeline.stt_provider import OpenAiSttTranscriber
 from stt_pipeline.summarize import build_basic_summary
 from stt_pipeline.transcript import TranscriptResult
@@ -68,6 +73,7 @@ def _build_parser() -> argparse.ArgumentParser:
     transcribe.add_argument("--pack", "--materials", action="append", dest="pack_paths")
     transcribe.add_argument("--ocr-images", action="store_true")
     transcribe.add_argument("--extract-pdfs", action="store_true")
+    transcribe.add_argument("--plan-reference-search", action="store_true")
     transcribe.add_argument("--pdf-extractor-script")
     transcribe.add_argument("--pdf-page-render", action="store_true")
     transcribe.add_argument("--preprocess", action="store_true")
@@ -75,6 +81,7 @@ def _build_parser() -> argparse.ArgumentParser:
     transcribe.add_argument("--correction-chunk-size", type=int)
     transcribe.add_argument("--correction-overlap", type=int, default=1)
     transcribe.add_argument("--summarize", action="store_true")
+    transcribe.add_argument("--enrich-notes", action="store_true")
     transcribe.add_argument("--output", required=True)
 
     run = subparsers.add_parser("run")
@@ -85,6 +92,7 @@ def _build_parser() -> argparse.ArgumentParser:
     run.add_argument("--pack", "--materials", action="append", dest="pack_paths")
     run.add_argument("--ocr-images", action="store_true")
     run.add_argument("--extract-pdfs", action="store_true")
+    run.add_argument("--plan-reference-search", action="store_true")
     run.add_argument("--pdf-extractor-script")
     run.add_argument("--pdf-page-render", action="store_true")
     run.add_argument("--preprocess", action="store_true")
@@ -92,6 +100,7 @@ def _build_parser() -> argparse.ArgumentParser:
     run.add_argument("--correction-chunk-size", type=int)
     run.add_argument("--correction-overlap", type=int, default=1)
     run.add_argument("--summarize", action="store_true")
+    run.add_argument("--enrich-notes", action="store_true")
     run.add_argument("--output", required=True)
 
     bakeoff = subparsers.add_parser("bakeoff")
@@ -102,6 +111,7 @@ def _build_parser() -> argparse.ArgumentParser:
     bakeoff.add_argument("--pack", "--materials", action="append", dest="pack_paths")
     bakeoff.add_argument("--ocr-images", action="store_true")
     bakeoff.add_argument("--extract-pdfs", action="store_true")
+    bakeoff.add_argument("--plan-reference-search", action="store_true")
     bakeoff.add_argument("--pdf-extractor-script")
     bakeoff.add_argument("--pdf-page-render", action="store_true")
     bakeoff.add_argument("--preprocess", action="store_true")
@@ -121,7 +131,8 @@ def _run_transcribe(
     output_dir = Path(args.output)
     output_dir.mkdir(parents=True, exist_ok=True)
     terms, pack = _load_prompt_terms(args, output_dir, image_ocr=image_ocr)
-    _maybe_extract_pdfs(args, output_dir, pack, command_runner)
+    reference_lookup_plans = _maybe_plan_reference_search(args, output_dir, pack)
+    pdf_results = _maybe_extract_pdfs(args, output_dir, pack, command_runner)
     audio_path, preprocess_manifest = _prepare_audio(args, output_dir, command_runner)
     result = transcriber.transcribe(
         audio_path,
@@ -145,6 +156,14 @@ def _run_transcribe(
     )
     if getattr(args, "summarize", False):
         _write_summary(output_dir / "summary.md", summary_source, correction_report)
+    if getattr(args, "enrich_notes", False):
+        _write_enriched_notes(
+            output_dir / "notes.md",
+            summary_source,
+            material_pack=pack,
+            pdf_results=pdf_results,
+            reference_lookup_plans=reference_lookup_plans,
+        )
     _write_run_manifest(
         output_dir / "run_manifest.json",
         input_audio=args.audio_path,
@@ -153,6 +172,7 @@ def _run_transcribe(
         result=result,
         corrected=correction_report is not None,
         summarized=getattr(args, "summarize", False),
+        reference_lookup_planned=getattr(args, "plan_reference_search", False),
         correction_manifest=_correction_manifest(args),
     )
     return 0
@@ -162,6 +182,7 @@ def _run_bakeoff(args, transcriber, *, image_ocr=None, command_runner=None) -> i
     output_dir = Path(args.output)
     output_dir.mkdir(parents=True, exist_ok=True)
     terms, pack = _load_prompt_terms(args, output_dir, image_ocr=image_ocr)
+    _maybe_plan_reference_search(args, output_dir, pack)
     _maybe_extract_pdfs(args, output_dir, pack, command_runner)
     audio_path, preprocess_manifest = _prepare_audio(args, output_dir, command_runner)
     providers = tuple(value.strip() for value in args.providers.split(",") if value.strip())
@@ -220,15 +241,15 @@ def _load_prompt_terms(args, output_dir: Path, *, image_ocr=None):
     return prompt_terms, pack
 
 
-def _maybe_extract_pdfs(args, output_dir: Path, pack, command_runner) -> None:
+def _maybe_extract_pdfs(args, output_dir: Path, pack, command_runner):
     if not getattr(args, "extract_pdfs", False):
-        return
+        return ()
     if pack is None or not pack.pdf_sources:
         (output_dir / "pdf_extraction_jobs.json").write_text(
             json.dumps({"jobs": []}, ensure_ascii=False, indent=2),
             encoding="utf-8",
         )
-        return
+        return ()
     if not args.pdf_extractor_script:
         raise ValueError("--pdf-extractor-script is required when --extract-pdfs is set")
     runner = command_runner or _run_command
@@ -252,6 +273,21 @@ def _maybe_extract_pdfs(args, output_dir: Path, pack, command_runner) -> None:
         json.dumps(pdf_extraction_results_to_dict(results), ensure_ascii=False, indent=2),
         encoding="utf-8",
     )
+    return results
+
+
+def _maybe_plan_reference_search(args, output_dir: Path, pack):
+    if not getattr(args, "plan_reference_search", False):
+        return ()
+    if pack is None:
+        plans = ()
+    else:
+        plans = build_reference_lookup_plans(pack.knowledge_pack)
+    (output_dir / "reference_lookup_jobs.json").write_text(
+        json.dumps(reference_lookup_plans_to_dict(plans), ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    return plans
 
 
 def _fallback_pdf_jobs(pdf_sources: tuple[str, ...]):
@@ -330,6 +366,23 @@ def _write_summary(
     path.write_text(summary.markdown, encoding="utf-8")
 
 
+def _write_enriched_notes(
+    path: Path,
+    result: TranscriptResult,
+    *,
+    material_pack,
+    pdf_results,
+    reference_lookup_plans=(),
+) -> None:
+    notes = build_enriched_notes(
+        result,
+        material_pack=material_pack,
+        pdf_results=pdf_results,
+        reference_lookup_plans=reference_lookup_plans,
+    )
+    path.write_text(notes.markdown, encoding="utf-8")
+
+
 def _write_run_manifest(
     path: Path,
     *,
@@ -339,6 +392,7 @@ def _write_run_manifest(
     result: TranscriptResult,
     corrected: bool,
     summarized: bool,
+    reference_lookup_planned: bool,
     correction_manifest: dict[str, object],
 ) -> None:
     path.write_text(
@@ -352,6 +406,7 @@ def _write_run_manifest(
                 "profile": result.profile,
                 "corrected": corrected,
                 "summarized": summarized,
+                "reference_lookup_planned": reference_lookup_planned,
                 "correction": correction_manifest,
             },
             ensure_ascii=False,

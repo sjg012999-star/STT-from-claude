@@ -20,8 +20,10 @@
 - [x] `stt run ... --pack ./materials` 기본 실행 흐름 → 텍스트/PPTX/OCR JSON 자료에서 STT prompt terms 생성
 - [x] 전처리 옵션, SRT 출력, OpenAI 교정 옵션, 기본 요약 출력
 - [x] OpenAI vision 기반 슬라이드 사진 OCR 옵션
+- [x] 레퍼런스 DOI/검색 URL 계획 출력 옵션
 - [x] 명시적 PDF figure/table 추출 실행 옵션
 - [x] 세미나/강연/회의 프로필별 기본 요약 섹션
+- [x] source label 기반 `notes.md` 보강 노트 출력
 - [x] Phase 1: MVP (CLI, 학회 프로필)
 - [ ] Phase 2: 회의/강연 프로필, 용어집 자동 누적
 - [ ] Phase 3: 웹 UI, 검수 도구
@@ -74,10 +76,18 @@ stt run sample.wav --profile seminar --provider gpt-4o --pack ./materials --extr
 
 `--extract-pdfs`는 명시적으로 켰을 때만 실행됩니다. 현재는 PDF에서 STT 용어를 직접 뽑지 않고, Knowledge Pack의 레퍼런스 기반 `pdf_extraction_jobs` 또는 PDF 파일명 기반 fallback job을 만들어 `pdf_extraction_jobs.json`에 실행 명령과 결과 경로를 남깁니다.
 
+레퍼런스 검색 계획 출력:
+
+```bash
+stt run sample.wav --profile seminar --provider gpt-4o --pack ./materials --plan-reference-search --output out/seminar
+```
+
+`--plan-reference-search`는 네트워크 다운로드를 실행하지 않고, 슬라이드 레퍼런스에서 DOI와 Crossref/OpenAlex/DOI URL 후보를 만들어 `reference_lookup_jobs.json`에 남깁니다. DOI가 있으면 `planned`, DOI가 없으면 `needs_lookup`으로 표시합니다.
+
 전처리, 교정, 요약까지 포함:
 
 ```bash
-stt run sample.wav --profile seminar --provider gpt-4o --pack ./materials --ocr-images --preprocess --correct --summarize --output out/seminar
+stt run sample.wav --profile seminar --provider gpt-4o --pack ./materials --ocr-images --preprocess --correct --summarize --plan-reference-search --enrich-notes --output out/seminar
 ```
 
 `--preprocess`는 `ffmpeg`로 16kHz mono/loudness-normalized WAV를 만든 뒤 STT에 넘깁니다. `--correct`는 OpenAI Responses API에 구조화된 교정 JSON을 요청하고, 실제 세그먼트에 존재하는 원문만 바꿉니다. `--summarize`는 전사/교정 결과를 분리한 기본 Markdown 요약을 만듭니다.
@@ -103,7 +113,9 @@ stt transcribe sample.wav --profile seminar --provider gpt-4o --terms-file terms
 - `corrected_transcript.md` / `corrected_transcript.json` / `corrected_transcript.srt` (`--correct`)
 - `corrections.json` (`--correct`)
 - `summary.md` (`--summarize`)
+- `notes.md` (`--enrich-notes`)
 - `prompt_terms.txt`, `knowledge_pack.json`, `run_manifest.json`
+- `reference_lookup_jobs.json` (`--plan-reference-search`)
 - `pdf_extraction_jobs.json`, `pdf_extract/` (`--extract-pdfs`)
 
 Whisper와 최신 OpenAI STT 후보 비교:

@@ -409,6 +409,113 @@ class CliTest(unittest.TestCase):
         self.assertIn("--pdf", runner_calls[0])
         self.assertEqual(len(pack_json["pdf_sources"]), 1)
 
+    def test_run_can_write_enriched_notes_with_pdf_results(self):
+        transcriber = FakeTranscriber()
+        runner_calls = []
+
+        def runner(command):
+            runner_calls.append(command)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            audio_path = root / "sample.wav"
+            materials_dir = root / "materials"
+            output_dir = root / "out"
+            script_path = root / "extract-figures-tables.py"
+            audio_path.write_bytes(b"fake audio")
+            materials_dir.mkdir()
+            (materials_dir / "slides.md").write_text(
+                "\n".join(
+                    [
+                        "The future of AI in IBD clinical practice",
+                        "Iacucci et al., Nature Reviews Gastroenterology & Hepatology 21, 510 (2024)",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            (materials_dir / "iacucci-2024.pdf").write_bytes(b"%PDF-1.7 fake")
+            script_path.write_text("# fake extractor\n", encoding="utf-8")
+
+            exit_code = main(
+                [
+                    "run",
+                    str(audio_path),
+                    "--profile",
+                    "seminar",
+                    "--provider",
+                    "gpt-4o",
+                    "--pack",
+                    str(materials_dir),
+                    "--extract-pdfs",
+                    "--pdf-extractor-script",
+                    str(script_path),
+                    "--enrich-notes",
+                    "--output",
+                    str(output_dir),
+                ],
+                transcriber=transcriber,
+                command_runner=runner,
+            )
+
+            notes = (output_dir / "notes.md").read_text(encoding="utf-8")
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(len(runner_calls), 1)
+        self.assertIn("## Speaker Transcript", notes)
+        self.assertIn("_source: speaker_transcript_", notes)
+        self.assertIn("## Reference PDF", notes)
+        self.assertIn("Iacucci et al.", notes)
+
+    def test_run_can_plan_reference_search_from_slide_references(self):
+        transcriber = FakeTranscriber()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            audio_path = root / "sample.wav"
+            materials_dir = root / "materials"
+            output_dir = root / "out"
+            audio_path.write_bytes(b"fake audio")
+            materials_dir.mkdir()
+            (materials_dir / "slides.md").write_text(
+                "\n".join(
+                    [
+                        "The future of AI in IBD clinical practice",
+                        "Iacucci et al., Nat Rev Gastroenterol Hepatol. 2024;21:510. doi:10.1038/s41575-024-00913-8",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+
+            exit_code = main(
+                [
+                    "run",
+                    str(audio_path),
+                    "--profile",
+                    "seminar",
+                    "--provider",
+                    "gpt-4o",
+                    "--pack",
+                    str(materials_dir),
+                    "--plan-reference-search",
+                    "--enrich-notes",
+                    "--output",
+                    str(output_dir),
+                ],
+                transcriber=transcriber,
+            )
+
+            reference_jobs = json.loads(
+                (output_dir / "reference_lookup_jobs.json").read_text(encoding="utf-8")
+            )
+            notes = (output_dir / "notes.md").read_text(encoding="utf-8")
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(reference_jobs["references"][0]["status"], "planned")
+        self.assertEqual(
+            reference_jobs["references"][0]["doi"],
+            "10.1038/s41575-024-00913-8",
+        )
+        self.assertIn("https://doi.org/10.1038/s41575-024-00913-8", notes)
+
 
 if __name__ == "__main__":
     unittest.main()

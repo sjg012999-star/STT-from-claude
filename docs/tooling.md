@@ -2,6 +2,8 @@
 
 This project should keep OCR, PDF parsing, web search, STT, and LLM calls behind adapters. Tests should use deterministic fixtures, not live services or paid APIs.
 
+`src/stt_pipeline/reference_lookup.py` currently creates deterministic DOI/Crossref/OpenAlex lookup plans only. Actual web lookup or PDF download should be added as a separate adapter step with fake-client tests first.
+
 ## Current Default Path
 
 Use the existing local PDF figure/table extraction workflow first:
