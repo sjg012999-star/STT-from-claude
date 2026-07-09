@@ -270,11 +270,11 @@ stt-conference/
 ### Phase 1 — MVP (CLI, 학회 프로필)
 - [x] **STT adapter + bake-off CLI** — `gpt-4o`, `gpt-4o-mini`, `whisper-1`, `diarize` 후보를 같은 녹음으로 비교 가능
 - [x] `stt run seminar.wav --profile seminar --pack ./materials/` 기본 흐름 — 텍스트/PPTX/OCR JSON 자료에서 prompt terms 생성 후 transcript.md/transcript.json 출력
-- [ ] 전처리 → 클라우드 STT → md/srt 출력
+- [x] 전처리 옵션 → 클라우드 STT → md/json/srt 출력
 - [x] Knowledge Pack **기본**: 텍스트/PPTX/OCR JSON 자료 → 용어 주입 (`--terms-file`과 병합)
 - [ ] Knowledge Pack 확장: 원본 슬라이드 사진 OCR, PDF 본문/figure/table 자동 추출 CLI 연결
-- [ ] OpenAI 교정 계층 (청크 분할, structured outputs, diff 검증) + 교정 내역 표
-- [ ] 기본 요약
+- [x] OpenAI 교정 계층 **기본**: structured outputs + 선언된 수정만 적용 + 거절 목록 기록
+- [x] 기본 요약
 - **완료 기준**: `stt run seminar.wav --profile seminar --pack ./materials/` 한 줄로 transcript.md 생성
 
 ### Phase 2 — 프로필 완성

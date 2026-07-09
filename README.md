@@ -18,7 +18,8 @@
 - [x] OCR 텍스트/레퍼런스 PDF 추출 어댑터 경계 → `src/stt_pipeline/slide_extract.py`, `src/stt_pipeline/pdf_tools.py`
 - [x] OpenAI STT adapter + provider bakeoff CLI → `src/stt_pipeline/stt_provider.py`, `src/stt_pipeline/cli.py`
 - [x] `stt run ... --pack ./materials` 기본 실행 흐름 → 텍스트/PPTX/OCR JSON 자료에서 STT prompt terms 생성
-- [ ] Phase 1: MVP (CLI, 학회 프로필)
+- [x] 전처리 옵션, SRT 출력, OpenAI 교정 옵션, 기본 요약 출력
+- [x] Phase 1: MVP (CLI, 학회 프로필)
 - [ ] Phase 2: 회의/강연 프로필, 용어집 자동 누적
 - [ ] Phase 3: 웹 UI, 검수 도구
 
@@ -36,6 +37,12 @@ API 키 설정:
 export OPENAI_API_KEY="..."
 ```
 
+교정 옵션까지 쓰려면 OpenAI 텍스트 모델도 환경변수로 지정:
+
+```bash
+export OPENAI_MODEL="your-openai-text-model"
+```
+
 자료 없이 전사:
 
 ```bash
@@ -50,11 +57,27 @@ stt run sample.wav --profile seminar --provider gpt-4o --pack ./materials --outp
 
 이후에는 녹음파일, 보강자료 폴더, `OPENAI_API_KEY`만 준비하면 됩니다. `--pack`은 현재 `.txt`, `.md`, `.pptx`, 슬라이드 OCR 결과 `.json`을 읽어 `prompt_terms.txt`와 `knowledge_pack.json`을 출력합니다. 원본 슬라이드 사진과 PDF 직접 OCR/파싱은 아직 자동 실행하지 않으며, 해당 파일이 있으면 출력 JSON의 `warnings`에 남깁니다.
 
+전처리, 교정, 요약까지 포함:
+
+```bash
+stt run sample.wav --profile seminar --provider gpt-4o --pack ./materials --preprocess --correct --summarize --output out/seminar
+```
+
+`--preprocess`는 `ffmpeg`로 16kHz mono/loudness-normalized WAV를 만든 뒤 STT에 넘깁니다. `--correct`는 OpenAI Responses API에 구조화된 교정 JSON을 요청하고, 실제 세그먼트에 존재하는 원문만 바꿉니다. `--summarize`는 전사/교정 결과를 분리한 기본 Markdown 요약을 만듭니다.
+
 직접 만든 용어 힌트 파일만 추가:
 
 ```bash
 stt transcribe sample.wav --profile seminar --provider gpt-4o --terms-file terms.txt --output out/seminar
 ```
+
+주요 출력:
+
+- `transcript.md` / `transcript.json` / `transcript.srt`
+- `corrected_transcript.md` / `corrected_transcript.json` / `corrected_transcript.srt` (`--correct`)
+- `corrections.json` (`--correct`)
+- `summary.md` (`--summarize`)
+- `prompt_terms.txt`, `knowledge_pack.json`, `run_manifest.json`
 
 Whisper와 최신 OpenAI STT 후보 비교:
 

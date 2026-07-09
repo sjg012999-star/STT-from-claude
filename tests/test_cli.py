@@ -4,6 +4,7 @@ import tempfile
 import unittest
 
 from stt_pipeline.cli import main
+from stt_pipeline.correct import Correction, CorrectionReport
 from stt_pipeline.transcript import TranscriptResult, TranscriptSegment
 
 
@@ -36,6 +37,44 @@ class FakeTranscriber:
                 ),
             ),
             usage_seconds=3.0,
+        )
+
+
+class FakeCorrector:
+    def __init__(self):
+        self.calls = []
+
+    def correct(self, result, *, prompt_terms=()):
+        self.calls.append({"result": result, "prompt_terms": tuple(prompt_terms)})
+        corrected = TranscriptResult(
+            provider=result.provider,
+            model=result.model,
+            profile=result.profile,
+            text=result.text.replace("Transcript", "Corrected transcript"),
+            segments=tuple(
+                TranscriptSegment(
+                    segment_id=segment.segment_id,
+                    text=segment.text.replace("Transcript", "Corrected transcript"),
+                    start_seconds=segment.start_seconds,
+                    end_seconds=segment.end_seconds,
+                    speaker=segment.speaker,
+                )
+                for segment in result.segments
+            ),
+            usage_seconds=result.usage_seconds,
+        )
+        return CorrectionReport(
+            corrected_result=corrected,
+            applied_corrections=(
+                Correction(
+                    segment_id="seg_001",
+                    original="Transcript",
+                    corrected="Corrected transcript",
+                    reason="test correction",
+                    confidence="high",
+                ),
+            ),
+            rejected_corrections=(),
         )
 
 
@@ -151,6 +190,81 @@ class CliTest(unittest.TestCase):
         self.assertIn("InTesTinyTM", transcriber.calls[0]["prompt_terms"])
         self.assertIn("NHS-PEG5k-cRGD", prompt_terms)
         self.assertEqual(pack_json["slide_count"], 1)
+
+    def test_run_can_preprocess_audio_and_writes_srt(self):
+        transcriber = FakeTranscriber()
+        runner_calls = []
+
+        def runner(command):
+            runner_calls.append(command)
+            Path(command[-1]).write_bytes(b"preprocessed audio")
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            audio_path = root / "raw.wav"
+            output_dir = root / "out"
+            audio_path.write_bytes(b"raw audio")
+
+            exit_code = main(
+                [
+                    "run",
+                    str(audio_path),
+                    "--profile",
+                    "seminar",
+                    "--provider",
+                    "gpt-4o",
+                    "--preprocess",
+                    "--output",
+                    str(output_dir),
+                ],
+                transcriber=transcriber,
+                command_runner=runner,
+            )
+
+            manifest = json.loads((output_dir / "run_manifest.json").read_text(encoding="utf-8"))
+            srt = (output_dir / "transcript.srt").read_text(encoding="utf-8")
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(transcriber.calls[0]["audio_path"], output_dir / "preprocessed.wav")
+        self.assertEqual(runner_calls[0][0], "ffmpeg")
+        self.assertTrue(manifest["preprocess"]["enabled"])
+        self.assertIn("00:00:00,000 --> 00:00:03,000", srt)
+
+    def test_run_can_write_corrected_transcript_and_summary(self):
+        transcriber = FakeTranscriber()
+        corrector = FakeCorrector()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            audio_path = root / "sample.wav"
+            output_dir = root / "out"
+            audio_path.write_bytes(b"fake audio")
+
+            exit_code = main(
+                [
+                    "run",
+                    str(audio_path),
+                    "--profile",
+                    "seminar",
+                    "--provider",
+                    "gpt-4o",
+                    "--correct",
+                    "--summarize",
+                    "--output",
+                    str(output_dir),
+                ],
+                transcriber=transcriber,
+                corrector=corrector,
+            )
+
+            corrected = (output_dir / "corrected_transcript.md").read_text(encoding="utf-8")
+            corrections = json.loads((output_dir / "corrections.json").read_text(encoding="utf-8"))
+            summary = (output_dir / "summary.md").read_text(encoding="utf-8")
+
+        self.assertEqual(exit_code, 0)
+        self.assertIn("Corrected transcript from gpt-4o", corrected)
+        self.assertEqual(corrections["applied_corrections"][0]["corrected"], "Corrected transcript")
+        self.assertIn("# Seminar Summary", summary)
+        self.assertEqual(corrector.calls[0]["prompt_terms"], ())
 
 
 if __name__ == "__main__":
