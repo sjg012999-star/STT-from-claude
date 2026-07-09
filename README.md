@@ -25,6 +25,7 @@
 - [x] Crossref 기반 레퍼런스 조회 및 open PDF cache 옵션
 - [x] 명시적 PDF figure/table 추출 실행 옵션
 - [x] 세미나/강연/회의 프로필별 기본 요약 섹션
+- [x] 적용된 교정쌍을 TSV glossary로 저장/재사용
 - [x] source label 기반 `notes.md` 보강 노트 출력
 - [x] OpenAI LLM 기반 source-labeled `rich_summary.md` 출력 옵션
 - [x] Phase 1: MVP (CLI, 학회 프로필)
@@ -121,6 +122,14 @@ stt run sample.wav --profile seminar --provider gpt-4o --pack ./materials --corr
 
 청크 정보는 `corrections.json`과 `run_manifest.json`에 남습니다.
 
+교정 결과를 다음 실행 용어집으로 저장:
+
+```bash
+stt run sample.wav --profile seminar --provider gpt-4o --correct --save-glossary ./glossary.tsv --output out/seminar
+```
+
+저장된 `glossary.tsv`는 그대로 `--terms-file ./glossary.tsv`로 다시 넣을 수 있습니다. 이때 STT prompt에는 `corrected` 컬럼의 용어만 들어갑니다.
+
 직접 만든 용어 힌트 파일만 추가:
 
 ```bash
@@ -132,6 +141,7 @@ stt transcribe sample.wav --profile seminar --provider gpt-4o --terms-file terms
 - `transcript.md` / `transcript.json` / `transcript.srt`
 - `corrected_transcript.md` / `corrected_transcript.json` / `corrected_transcript.srt` (`--correct`)
 - `corrections.json` (`--correct`)
+- `glossary.tsv` 또는 지정 경로 (`--save-glossary`)
 - `summary.md` (`--summarize`)
 - `rich_summary.md` (`--llm-summarize`)
 - `notes.md` (`--enrich-notes`)

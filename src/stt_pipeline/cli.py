@@ -12,6 +12,12 @@ from stt_pipeline.correct import (
     CorrectionReport,
     correction_report_to_dict,
 )
+from stt_pipeline.glossary import (
+    build_glossary_entries_from_corrections,
+    load_glossary_tsv,
+    merge_glossary_entries,
+    write_glossary_tsv,
+)
 from stt_pipeline.materials import load_material_pack, material_pack_to_dict
 from stt_pipeline.notes import build_enriched_notes
 from stt_pipeline.pdf_tools import (
@@ -90,6 +96,7 @@ def _build_parser() -> argparse.ArgumentParser:
     transcribe.add_argument("--chunk-audio", action="store_true")
     transcribe.add_argument("--chunk-seconds", type=int, default=600)
     transcribe.add_argument("--correct", action="store_true")
+    transcribe.add_argument("--save-glossary")
     transcribe.add_argument("--correction-chunk-size", type=int)
     transcribe.add_argument("--correction-overlap", type=int, default=1)
     transcribe.add_argument("--summarize", action="store_true")
@@ -113,6 +120,7 @@ def _build_parser() -> argparse.ArgumentParser:
     run.add_argument("--chunk-audio", action="store_true")
     run.add_argument("--chunk-seconds", type=int, default=600)
     run.add_argument("--correct", action="store_true")
+    run.add_argument("--save-glossary")
     run.add_argument("--correction-chunk-size", type=int)
     run.add_argument("--correction-overlap", type=int, default=1)
     run.add_argument("--summarize", action="store_true")
@@ -189,6 +197,7 @@ def _run_transcribe(
         terms,
         corrector=corrector,
     )
+    glossary_manifest = _maybe_save_glossary(args, correction_report)
     summary_source = (
         correction_report.corrected_result if correction_report is not None else result
     )
@@ -227,6 +236,7 @@ def _run_transcribe(
         llm_summarized=getattr(args, "llm_summarize", False),
         reference_lookup_planned=getattr(args, "plan_reference_search", False),
         references_looked_up=getattr(args, "lookup_references", False),
+        glossary_manifest=glossary_manifest,
         correction_manifest=_correction_manifest(args),
     )
     return 0
@@ -460,6 +470,15 @@ def _read_terms(terms_file: str | None) -> tuple[str, ...]:
     if not terms_file:
         return ()
     lines = Path(terms_file).read_text(encoding="utf-8").splitlines()
+    if lines and "\t" in lines[0] and "corrected" in lines[0].split("\t"):
+        headers = lines[0].split("\t")
+        corrected_index = headers.index("corrected")
+        terms = []
+        for line in lines[1:]:
+            columns = line.split("\t")
+            if len(columns) > corrected_index and columns[corrected_index].strip():
+                terms.append(columns[corrected_index].strip())
+        return tuple(terms)
     return tuple(line.strip() for line in lines if line.strip())
 
 
@@ -508,6 +527,25 @@ def _maybe_write_corrections(
         encoding="utf-8",
     )
     return report
+
+
+def _maybe_save_glossary(args, correction_report: CorrectionReport | None) -> dict[str, object]:
+    path = getattr(args, "save_glossary", None)
+    if not path:
+        return {"enabled": False}
+    if correction_report is None:
+        raise ValueError("--save-glossary requires --correct")
+    glossary_path = Path(path)
+    existing = load_glossary_tsv(glossary_path)
+    new_entries = build_glossary_entries_from_corrections(correction_report)
+    merged = merge_glossary_entries(existing, new_entries)
+    write_glossary_tsv(glossary_path, merged)
+    return {
+        "enabled": True,
+        "saved_to": str(glossary_path),
+        "new_entries": len(new_entries),
+        "total_entries": len(merged),
+    }
 
 
 def _write_summary(
@@ -576,6 +614,7 @@ def _write_run_manifest(
     llm_summarized: bool,
     reference_lookup_planned: bool,
     references_looked_up: bool,
+    glossary_manifest: dict[str, object],
     correction_manifest: dict[str, object],
 ) -> None:
     path.write_text(
@@ -593,6 +632,7 @@ def _write_run_manifest(
                 "llm_summarized": llm_summarized,
                 "reference_lookup_planned": reference_lookup_planned,
                 "references_looked_up": references_looked_up,
+                "glossary": glossary_manifest,
                 "correction": correction_manifest,
             },
             ensure_ascii=False,

@@ -194,6 +194,39 @@ class CliTest(unittest.TestCase):
         self.assertIn("# Transcript", markdown)
         self.assertIn("Transcript from gpt-4o", markdown)
 
+    def test_transcribe_can_use_saved_glossary_tsv_as_terms_file(self):
+        transcriber = FakeTranscriber()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            audio_path = root / "sample.wav"
+            glossary_path = root / "glossary.tsv"
+            output_dir = root / "out"
+            audio_path.write_bytes(b"fake audio")
+            glossary_path.write_text(
+                "original\tcorrected\treason\tconfidence\tcount\n"
+                "in test tiny\tInTesTiny\tdomain term\thigh\t3\n",
+                encoding="utf-8",
+            )
+
+            exit_code = main(
+                [
+                    "transcribe",
+                    str(audio_path),
+                    "--profile",
+                    "seminar",
+                    "--provider",
+                    "gpt-4o",
+                    "--terms-file",
+                    str(glossary_path),
+                    "--output",
+                    str(output_dir),
+                ],
+                transcriber=transcriber,
+            )
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(transcriber.calls[0]["prompt_terms"], ("InTesTiny",))
+
     def test_bakeoff_writes_provider_outputs_and_report(self):
         transcriber = FakeTranscriber()
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -388,6 +421,41 @@ class CliTest(unittest.TestCase):
         self.assertEqual(corrections["applied_corrections"][0]["corrected"], "Corrected transcript")
         self.assertIn("# Seminar Summary", summary)
         self.assertEqual(corrector.calls[0]["prompt_terms"], ())
+
+    def test_run_can_save_glossary_entries_from_applied_corrections(self):
+        transcriber = FakeTranscriber()
+        corrector = FakeCorrector()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            audio_path = root / "sample.wav"
+            glossary_path = root / "glossary.tsv"
+            output_dir = root / "out"
+            audio_path.write_bytes(b"fake audio")
+
+            exit_code = main(
+                [
+                    "run",
+                    str(audio_path),
+                    "--profile",
+                    "seminar",
+                    "--provider",
+                    "gpt-4o",
+                    "--correct",
+                    "--save-glossary",
+                    str(glossary_path),
+                    "--output",
+                    str(output_dir),
+                ],
+                transcriber=transcriber,
+                corrector=corrector,
+            )
+
+            glossary = glossary_path.read_text(encoding="utf-8")
+            manifest = json.loads((output_dir / "run_manifest.json").read_text(encoding="utf-8"))
+
+        self.assertEqual(exit_code, 0)
+        self.assertIn("Transcript\tCorrected transcript", glossary)
+        self.assertEqual(manifest["glossary"]["saved_to"], str(glossary_path))
 
     def test_run_can_configure_correction_chunking(self):
         transcriber = FakeTranscriber()

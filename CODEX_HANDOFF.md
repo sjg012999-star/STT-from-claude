@@ -23,6 +23,7 @@ Do not force-push or overwrite the original Claude branch. If Claude resumes wor
 - Added live Crossref reference lookup and open PDF caching via `--lookup-references`.
 - Added explicit PDF figure/table extraction command execution via `--extract-pdfs`.
 - Added chunked transcript correction options for long recordings.
+- Added correction-pair glossary accumulation via `--save-glossary`; TSV can be reused as `--terms-file`.
 - Expanded deterministic profile summaries for seminar, lecture, and meeting outputs.
 - Added source-separated enriched notes output via `--enrich-notes`.
 - Added OpenAI LLM source-labeled rich summary output via `--llm-summarize`.
@@ -48,6 +49,7 @@ Live OpenAI STT is wired behind `OpenAiSttTranscriber`, local `mlx-whisper` is r
 - `src/stt_pipeline/preprocess.py`: deterministic ffmpeg preprocess command builder and runner.
 - `src/stt_pipeline/report.py`: SRT rendering from timestamped transcript segments.
 - `src/stt_pipeline/correct.py`: OpenAI structured correction adapter plus exact-change validation.
+- `src/stt_pipeline/glossary.py`: TSV glossary accumulation from applied corrections.
 - `src/stt_pipeline/summarize.py`: basic source-separated Markdown summary generation.
 - `src/stt_pipeline/rich_summary.py`: OpenAI structured rich summary adapter with source-label validation.
 - `src/stt_pipeline/notes.py`: deterministic source-separated enriched notes generation.
@@ -63,6 +65,7 @@ Live OpenAI STT is wired behind `OpenAiSttTranscriber`, local `mlx-whisper` is r
 - `tests/test_reference_lookup.py`: tests for DOI extraction, reference lookup planning, fake Crossref metadata, and PDF cache.
 - `tests/test_pdf_tools.py`: tests for PDF extraction command planning.
 - `tests/test_rich_summary.py`: tests for structured rich summary rendering and source-label rejection.
+- `tests/test_glossary.py`: tests for correction-pair glossary build/merge/read/write.
 - `docs/tooling.md`: GitHub/tooling candidates and integration rules.
 
 ## Next Implementation Order
@@ -81,6 +84,7 @@ Use `--lookup-references` to perform live Crossref metadata lookup and cache ope
 Use `--preprocess` to run ffmpeg before STT. Use `--correct` only when `OPENAI_MODEL` is set; it asks for structured correction JSON and applies only exact declared replacements. Use `--summarize` for the basic Markdown summary.
 Use `--chunk-audio --chunk-seconds 600` for long recordings that may exceed STT file upload limits. Chunking runs after preprocessing, writes `audio_chunks/chunk_*.wav`, transcribes each chunk, and offsets timestamps before writing the combined transcript.
 Use `--correction-chunk-size` and `--correction-overlap` for long recordings; chunk provenance is written to `corrections.json` and `run_manifest.json`.
+Use `--save-glossary ./glossary.tsv` with `--correct` to accumulate applied correction pairs. The saved TSV can be passed back as `--terms-file`; only the `corrected` column is used as prompt terms.
 `--summarize` currently uses deterministic profile templates, not an LLM summarizer.
 `--llm-summarize` uses `OPENAI_MODEL` through `OpenAiRichSummarizer` and writes `rich_summary.md`. It requires every generated item to carry one of the allowed source labels: `speaker_transcript`, `slide_text`, `reference_pdf`, or `additional_research`.
 `--enrich-notes` writes `notes.md` with explicit source sections: speaker transcript, slide text, reference PDF, additional research, and needs review. If `--plan-reference-search` is used, additional research includes planned lookup URLs; if `--lookup-references` is used, it includes lookup status, title, and cached PDF path when available.
