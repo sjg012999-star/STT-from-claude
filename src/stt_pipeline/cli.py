@@ -12,6 +12,11 @@ from stt_pipeline.correct import (
     correction_report_to_dict,
 )
 from stt_pipeline.materials import load_material_pack, material_pack_to_dict
+from stt_pipeline.pdf_tools import (
+    FigureTableExtractorConfig,
+    pdf_extraction_results_to_dict,
+    run_pdf_extraction_jobs,
+)
 from stt_pipeline.preprocess import build_preprocess_plan, preprocess_audio
 from stt_pipeline.report import render_srt
 from stt_pipeline.stt_provider import OpenAiSttTranscriber
@@ -62,6 +67,9 @@ def _build_parser() -> argparse.ArgumentParser:
     transcribe.add_argument("--terms-file")
     transcribe.add_argument("--pack", "--materials", action="append", dest="pack_paths")
     transcribe.add_argument("--ocr-images", action="store_true")
+    transcribe.add_argument("--extract-pdfs", action="store_true")
+    transcribe.add_argument("--pdf-extractor-script")
+    transcribe.add_argument("--pdf-page-render", action="store_true")
     transcribe.add_argument("--preprocess", action="store_true")
     transcribe.add_argument("--correct", action="store_true")
     transcribe.add_argument("--summarize", action="store_true")
@@ -74,6 +82,9 @@ def _build_parser() -> argparse.ArgumentParser:
     run.add_argument("--terms-file")
     run.add_argument("--pack", "--materials", action="append", dest="pack_paths")
     run.add_argument("--ocr-images", action="store_true")
+    run.add_argument("--extract-pdfs", action="store_true")
+    run.add_argument("--pdf-extractor-script")
+    run.add_argument("--pdf-page-render", action="store_true")
     run.add_argument("--preprocess", action="store_true")
     run.add_argument("--correct", action="store_true")
     run.add_argument("--summarize", action="store_true")
@@ -86,6 +97,9 @@ def _build_parser() -> argparse.ArgumentParser:
     bakeoff.add_argument("--terms-file")
     bakeoff.add_argument("--pack", "--materials", action="append", dest="pack_paths")
     bakeoff.add_argument("--ocr-images", action="store_true")
+    bakeoff.add_argument("--extract-pdfs", action="store_true")
+    bakeoff.add_argument("--pdf-extractor-script")
+    bakeoff.add_argument("--pdf-page-render", action="store_true")
     bakeoff.add_argument("--preprocess", action="store_true")
     bakeoff.add_argument("--output", required=True)
 
@@ -102,7 +116,8 @@ def _run_transcribe(
 ) -> int:
     output_dir = Path(args.output)
     output_dir.mkdir(parents=True, exist_ok=True)
-    terms = _load_prompt_terms(args, output_dir, image_ocr=image_ocr)
+    terms, pack = _load_prompt_terms(args, output_dir, image_ocr=image_ocr)
+    _maybe_extract_pdfs(args, output_dir, pack, command_runner)
     audio_path, preprocess_manifest = _prepare_audio(args, output_dir, command_runner)
     result = transcriber.transcribe(
         audio_path,
@@ -141,7 +156,8 @@ def _run_transcribe(
 def _run_bakeoff(args, transcriber, *, image_ocr=None, command_runner=None) -> int:
     output_dir = Path(args.output)
     output_dir.mkdir(parents=True, exist_ok=True)
-    terms = _load_prompt_terms(args, output_dir, image_ocr=image_ocr)
+    terms, pack = _load_prompt_terms(args, output_dir, image_ocr=image_ocr)
+    _maybe_extract_pdfs(args, output_dir, pack, command_runner)
     audio_path, preprocess_manifest = _prepare_audio(args, output_dir, command_runner)
     providers = tuple(value.strip() for value in args.providers.split(",") if value.strip())
     results = []
@@ -181,8 +197,9 @@ def _prepare_audio(args, output_dir: Path, command_runner) -> tuple[Path, dict[s
     }
 
 
-def _load_prompt_terms(args, output_dir: Path, *, image_ocr=None) -> tuple[str, ...]:
+def _load_prompt_terms(args, output_dir: Path, *, image_ocr=None):
     terms = list(_read_terms(args.terms_file))
+    pack = None
     pack_paths = tuple(getattr(args, "pack_paths", None) or ())
     if pack_paths:
         active_image_ocr = None
@@ -195,7 +212,54 @@ def _load_prompt_terms(args, output_dir: Path, *, image_ocr=None) -> tuple[str, 
     prompt_terms = _dedupe_terms(terms)
     if prompt_terms:
         _write_prompt_terms(output_dir / "prompt_terms.txt", prompt_terms)
-    return prompt_terms
+    return prompt_terms, pack
+
+
+def _maybe_extract_pdfs(args, output_dir: Path, pack, command_runner) -> None:
+    if not getattr(args, "extract_pdfs", False):
+        return
+    if pack is None or not pack.pdf_sources:
+        (output_dir / "pdf_extraction_jobs.json").write_text(
+            json.dumps({"jobs": []}, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        return
+    if not args.pdf_extractor_script:
+        raise ValueError("--pdf-extractor-script is required when --extract-pdfs is set")
+    runner = command_runner or _run_command
+    config = FigureTableExtractorConfig(
+        script_path=Path(args.pdf_extractor_script),
+        page_render=bool(getattr(args, "pdf_page_render", False)),
+    )
+    jobs = pack.knowledge_pack.pdf_extraction_jobs
+    if not jobs:
+        jobs = tuple(
+            _fallback_pdf_jobs(pack.pdf_sources)
+        )
+    results = run_pdf_extraction_jobs(
+        jobs,
+        pdf_paths=tuple(Path(path) for path in pack.pdf_sources),
+        out_dir=output_dir / "pdf_extract",
+        config=config,
+        runner=runner,
+    )
+    (output_dir / "pdf_extraction_jobs.json").write_text(
+        json.dumps(pdf_extraction_results_to_dict(results), ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+
+
+def _fallback_pdf_jobs(pdf_sources: tuple[str, ...]):
+    from stt_pipeline.knowledge_pack import PdfExtractionJob
+
+    for pdf_source in pdf_sources:
+        yield PdfExtractionJob(reference=Path(pdf_source).stem, source_slide_ids=())
+
+
+def _run_command(command: Sequence[str]) -> None:
+    import subprocess
+
+    subprocess.run(command, check=True)
 
 
 def _read_terms(terms_file: str | None) -> tuple[str, ...]:

@@ -33,6 +33,7 @@ class MaterialPack:
     prompt_terms: tuple[str, ...]
     warnings: tuple[str, ...]
     sources: tuple[str, ...]
+    pdf_sources: tuple[str, ...]
     knowledge_pack: KnowledgePack
 
 
@@ -45,12 +46,17 @@ def load_material_pack(
     material_paths = tuple(Path(path) for path in paths)
     slides: list[SlideOcrInput] = []
     sources: list[str] = []
+    pdf_sources: list[str] = []
     warnings: list[str] = []
 
     for path in material_paths:
         files, path_warnings = _expand_material_path(path, image_ocr=image_ocr)
         warnings.extend(path_warnings)
         for file_path in files:
+            if file_path.suffix.casefold() == ".pdf":
+                pdf_sources.append(str(file_path))
+                warnings.extend(_unsupported_warning(file_path))
+                continue
             loaded, file_warnings = _load_material_file(file_path, image_ocr=image_ocr)
             warnings.extend(file_warnings)
             if loaded:
@@ -66,6 +72,7 @@ def load_material_pack(
         prompt_terms=_select_prompt_terms(knowledge_pack, max_prompt_terms),
         warnings=tuple(_dedupe(warnings)),
         sources=tuple(sources),
+        pdf_sources=tuple(_dedupe(pdf_sources)),
         knowledge_pack=knowledge_pack,
     )
 
@@ -77,6 +84,7 @@ def material_pack_to_dict(pack: MaterialPack) -> dict[str, object]:
         "prompt_terms": list(pack.prompt_terms),
         "warnings": list(pack.warnings),
         "sources": list(pack.sources),
+        "pdf_sources": list(pack.pdf_sources),
         "research_tasks": [
             {
                 "query": task.query,
@@ -104,7 +112,7 @@ def _expand_material_path(path: Path, *, image_ocr) -> tuple[tuple[Path, ...], t
         return (), (f"material path not found: {path}",)
     if path.is_file():
         suffix = path.suffix.casefold()
-        is_loadable = suffix in SUPPORTED_SUFFIXES or (
+        is_loadable = suffix in SUPPORTED_SUFFIXES or suffix == ".pdf" or (
             suffix in IMAGE_SUFFIXES and image_ocr is not None
         )
         return ((path,) if is_loadable else ()), _unsupported_warning(path, image_ocr=image_ocr)
@@ -113,7 +121,7 @@ def _expand_material_path(path: Path, *, image_ocr) -> tuple[tuple[Path, ...], t
     warnings = []
     for child in sorted(value for value in path.rglob("*") if value.is_file()):
         suffix = child.suffix.casefold()
-        if suffix in SUPPORTED_SUFFIXES or (
+        if suffix in SUPPORTED_SUFFIXES or suffix == ".pdf" or (
             suffix in IMAGE_SUFFIXES and image_ocr is not None
         ):
             files.append(child)
@@ -134,7 +142,7 @@ def _unsupported_warning(path: Path, *, image_ocr=None) -> tuple[str, ...]:
         )
     if suffix == ".pdf":
         return (
-            f"PDF text extraction is not wired for {path}; use text notes or the PDF figure/table workflow first",
+            f"PDF extraction is planned but not run for {path}; pass --extract-pdfs to run the figure/table workflow",
         )
     if suffix == ".ppt":
         return (f"legacy PPT is not supported for {path}; export as PPTX first",)

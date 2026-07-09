@@ -273,7 +273,8 @@ stt-conference/
 - [x] 전처리 옵션 → 클라우드 STT → md/json/srt 출력
 - [x] Knowledge Pack **기본**: 텍스트/PPTX/OCR JSON 자료 → 용어 주입 (`--terms-file`과 병합)
 - [x] Knowledge Pack 확장 1차: 원본 슬라이드 사진 OCR 옵션 (`--ocr-images`)
-- [ ] Knowledge Pack 확장 2차: PDF 본문/figure/table 자동 추출 CLI 연결
+- [x] Knowledge Pack 확장 2차: 명시적 PDF figure/table 추출 CLI 연결 (`--extract-pdfs`)
+- [ ] Knowledge Pack 확장 3차: PDF 본문/figure/table 결과를 보강 노트에 자동 반영
 - [x] OpenAI 교정 계층 **기본**: structured outputs + 선언된 수정만 적용 + 거절 목록 기록
 - [x] 기본 요약
 - **완료 기준**: `stt run seminar.wav --profile seminar --pack ./materials/` 한 줄로 transcript.md 생성

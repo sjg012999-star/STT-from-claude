@@ -10,7 +10,7 @@ Use the existing local PDF figure/table extraction workflow first:
 - pdfplumber: PDF text and table candidate extraction.
 - camelot-py: tighter table region extraction where digital table structure is available.
 
-The adapter in `src/stt_pipeline/pdf_tools.py` only builds the command for the existing script. It does not execute PDF parsing itself.
+The adapter in `src/stt_pipeline/pdf_tools.py` builds the command for the existing script and the CLI can execute it only behind `--extract-pdfs --pdf-extractor-script ...`. Tests use injected runners and never invoke the real external tools.
 
 ## Candidate GitHub Tools
 

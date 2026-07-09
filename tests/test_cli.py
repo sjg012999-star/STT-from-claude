@@ -323,6 +323,57 @@ class CliTest(unittest.TestCase):
         self.assertEqual(pack_json["slide_count"], 1)
         self.assertIn("Iacucci et al.", "\n".join(transcriber.calls[0]["prompt_terms"]))
 
+    def test_run_can_extract_pdf_materials_with_explicit_flag(self):
+        transcriber = FakeTranscriber()
+        runner_calls = []
+
+        def runner(command):
+            runner_calls.append(command)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            audio_path = root / "sample.wav"
+            materials_dir = root / "materials"
+            output_dir = root / "out"
+            script_path = root / "extract-figures-tables.py"
+            audio_path.write_bytes(b"fake audio")
+            materials_dir.mkdir()
+            (materials_dir / "iacucci-2024.pdf").write_bytes(b"%PDF-1.7 fake")
+            (materials_dir / "slides.md").write_text(
+                "Iacucci et al., Nature Reviews Gastroenterology & Hepatology 21, 510 (2024)\n",
+                encoding="utf-8",
+            )
+            script_path.write_text("# fake extractor\n", encoding="utf-8")
+
+            exit_code = main(
+                [
+                    "run",
+                    str(audio_path),
+                    "--profile",
+                    "seminar",
+                    "--provider",
+                    "gpt-4o",
+                    "--pack",
+                    str(materials_dir),
+                    "--extract-pdfs",
+                    "--pdf-extractor-script",
+                    str(script_path),
+                    "--output",
+                    str(output_dir),
+                ],
+                transcriber=transcriber,
+                command_runner=runner,
+            )
+
+            pdf_manifest = json.loads((output_dir / "pdf_extraction_jobs.json").read_text(encoding="utf-8"))
+            pack_json = json.loads((output_dir / "knowledge_pack.json").read_text(encoding="utf-8"))
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(len(runner_calls), 1)
+        self.assertEqual(pdf_manifest["jobs"][0]["status"], "planned")
+        self.assertIn("--pdf", runner_calls[0])
+        self.assertEqual(len(pack_json["pdf_sources"]), 1)
+
 
 if __name__ == "__main__":
     unittest.main()

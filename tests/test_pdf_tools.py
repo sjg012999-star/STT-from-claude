@@ -1,8 +1,13 @@
-import unittest
 from pathlib import Path
+import tempfile
+import unittest
 
 from stt_pipeline.knowledge_pack import PdfExtractionJob
-from stt_pipeline.pdf_tools import FigureTableExtractorConfig, build_extraction_command
+from stt_pipeline.pdf_tools import (
+    FigureTableExtractorConfig,
+    build_extraction_command,
+    run_pdf_extraction_jobs,
+)
 
 
 class PdfToolsTest(unittest.TestCase):
@@ -51,6 +56,40 @@ class PdfToolsTest(unittest.TestCase):
         )
 
         self.assertIn("--page-render", command)
+
+    def test_runs_extraction_jobs_with_injected_runner_and_manifest(self):
+        calls = []
+
+        def runner(command):
+            calls.append(command)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            pdf_path = root / "iacucci-2024.pdf"
+            pdf_path.write_bytes(b"%PDF-1.7 fake")
+            config = FigureTableExtractorConfig(
+                script_path=Path("tools/pdf-figure-table-extract/scripts/extract-figures-tables.py")
+            )
+            jobs = (
+                PdfExtractionJob(
+                    reference="Iacucci et al., Nature Reviews Gastroenterology & Hepatology 21, 510 (2024)",
+                    source_slide_ids=("slide-27",),
+                ),
+            )
+
+            results = run_pdf_extraction_jobs(
+                jobs,
+                pdf_paths=(pdf_path,),
+                out_dir=root / "pdf-extract",
+                config=config,
+                runner=runner,
+            )
+
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0].status, "planned")
+        self.assertEqual(results[0].pdf_path, pdf_path)
+        self.assertEqual(calls[0], results[0].command)
+        self.assertIn("iacucci-2024", str(results[0].out_dir))
 
 
 if __name__ == "__main__":

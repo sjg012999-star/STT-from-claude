@@ -18,9 +18,10 @@ Do not force-push or overwrite the original Claude branch. If Claude resumes wor
 - Added material-pack prompt term extraction for text, Markdown, PPTX, and slide OCR JSON.
 - Added optional ffmpeg preprocessing, SRT output, OpenAI structured correction, and basic Markdown summary output.
 - Added optional OpenAI vision OCR for slide photos via `--ocr-images`.
+- Added explicit PDF figure/table extraction command execution via `--extract-pdfs`.
 - Updated README and PLAN to reflect reference-first, deck-level slide analysis and transcript/slide mutual support.
 
-Live OpenAI STT is wired behind `OpenAiSttTranscriber`, optional OpenAI transcript correction is wired behind `OpenAiTranscriptCorrector`, and optional slide-photo OCR is wired behind `OpenAiSlideImageOcr`. Tests still use fakes and do not call paid or network APIs. Live web search, LLM-based rich summarization, and PDF parsing execution are not wired yet.
+Live OpenAI STT is wired behind `OpenAiSttTranscriber`, optional OpenAI transcript correction is wired behind `OpenAiTranscriptCorrector`, optional slide-photo OCR is wired behind `OpenAiSlideImageOcr`, and optional PDF figure/table extraction execution is wired behind explicit CLI flags. Tests still use fakes and do not call paid or network APIs. Live web search, LLM-based rich summarization, and PDF extraction result ingestion into notes are not wired yet.
 
 ## Current Repo Contents
 
@@ -50,8 +51,8 @@ Live OpenAI STT is wired behind `OpenAiSttTranscriber`, optional OpenAI transcri
 
 ## Next Implementation Order
 
-1. Connect reference PDF acquisition to the existing figure/table extraction toolchain.
-2. Add PDF text/figure/table extraction execution behind explicit CLI flags.
+1. Add PDF extraction result ingestion into source-separated enriched notes.
+2. Add reference PDF acquisition/search behind explicit adapter boundaries.
 3. Add chunked correction for long recordings and preserve overlap provenance.
 4. Expand profile-specific summaries for lecture and meeting outputs.
 5. Add skipped integration tests for any optional external tool before wiring it into the CLI.
@@ -60,9 +61,10 @@ Live OpenAI STT is wired behind `OpenAiSttTranscriber`, optional OpenAI transcri
 Keep real cloud STT and OpenAI API calls behind adapters. Tests should use fakes and local fixtures, not paid network calls.
 OpenAI text model names must come from `OPENAI_MODEL`; use `OPENAI_VISION_MODEL` only when a distinct vision model is needed. Do not hardcode another provider model into the pipeline.
 The STT adapter already supports `gpt-4o`, `gpt-4o-mini`, `whisper-1`, and `diarize` provider aliases. Knowledge Pack remains optional; Phase 1 uses compact STT prompt hints, not heavy enrichment.
-`stt run ... --pack ./materials` now merges `--terms-file` with prompt terms extracted from `.txt`, `.md`, `.pptx`, slide OCR `.json`, and slide photos when `--ocr-images` is passed. PDFs are intentionally not auto-parsed yet; the material pack records warnings so Claude/Codex does not mistake skipped files for parsed evidence.
+`stt run ... --pack ./materials` now merges `--terms-file` with prompt terms extracted from `.txt`, `.md`, `.pptx`, slide OCR `.json`, and slide photos when `--ocr-images` is passed. PDFs are not mixed into prompt terms; they are tracked as `pdf_sources` and can be processed with `--extract-pdfs --pdf-extractor-script ...`.
 Use `--preprocess` to run ffmpeg before STT. Use `--correct` only when `OPENAI_MODEL` is set; it asks for structured correction JSON and applies only exact declared replacements. Use `--summarize` for the basic Markdown summary.
 Use `--ocr-images` only when `OPENAI_MODEL`/`OPENAI_VISION_MODEL` are configured and slide-photo OCR cost is acceptable.
+Use `--extract-pdfs` only with an explicit extractor script path. The command runner executes the existing figure/table workflow and writes `pdf_extraction_jobs.json`; tests use fake runners.
 
 ## Conflict Guidance
 

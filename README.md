@@ -20,6 +20,7 @@
 - [x] `stt run ... --pack ./materials` 기본 실행 흐름 → 텍스트/PPTX/OCR JSON 자료에서 STT prompt terms 생성
 - [x] 전처리 옵션, SRT 출력, OpenAI 교정 옵션, 기본 요약 출력
 - [x] OpenAI vision 기반 슬라이드 사진 OCR 옵션
+- [x] 명시적 PDF figure/table 추출 실행 옵션
 - [x] Phase 1: MVP (CLI, 학회 프로필)
 - [ ] Phase 2: 회의/강연 프로필, 용어집 자동 누적
 - [ ] Phase 3: 웹 UI, 검수 도구
@@ -56,13 +57,21 @@ stt transcribe sample.wav --profile seminar --provider gpt-4o --output out/semin
 stt run sample.wav --profile seminar --provider gpt-4o --pack ./materials --output out/seminar
 ```
 
-이후에는 녹음파일, 보강자료 폴더, `OPENAI_API_KEY`만 준비하면 됩니다. `--pack`은 현재 `.txt`, `.md`, `.pptx`, 슬라이드 OCR 결과 `.json`을 읽어 `prompt_terms.txt`와 `knowledge_pack.json`을 출력합니다. 슬라이드 사진(`.jpg`, `.jpeg`, `.png`, `.heic`)은 `--ocr-images`를 같이 주면 OpenAI vision으로 OCR합니다. PDF 직접 파싱은 아직 자동 실행하지 않으며, PDF가 있으면 출력 JSON의 `warnings`에 남깁니다.
+이후에는 녹음파일, 보강자료 폴더, `OPENAI_API_KEY`만 준비하면 됩니다. `--pack`은 현재 `.txt`, `.md`, `.pptx`, 슬라이드 OCR 결과 `.json`을 읽어 `prompt_terms.txt`와 `knowledge_pack.json`을 출력합니다. 슬라이드 사진(`.jpg`, `.jpeg`, `.png`, `.heic`)은 `--ocr-images`를 같이 주면 OpenAI vision으로 OCR합니다. PDF는 기본으로 STT prompt terms에 섞지 않고 `pdf_sources`와 warning에 남깁니다.
 
 슬라이드 사진 OCR 포함:
 
 ```bash
 stt run sample.wav --profile seminar --provider gpt-4o --pack ./materials --ocr-images --output out/seminar
 ```
+
+PDF figure/table 추출 도구 실행:
+
+```bash
+stt run sample.wav --profile seminar --provider gpt-4o --pack ./materials --extract-pdfs --pdf-extractor-script /path/to/extract-figures-tables.py --output out/seminar
+```
+
+`--extract-pdfs`는 명시적으로 켰을 때만 실행됩니다. 현재는 PDF에서 STT 용어를 직접 뽑지 않고, Knowledge Pack의 레퍼런스 기반 `pdf_extraction_jobs` 또는 PDF 파일명 기반 fallback job을 만들어 `pdf_extraction_jobs.json`에 실행 명령과 결과 경로를 남깁니다.
 
 전처리, 교정, 요약까지 포함:
 
@@ -85,6 +94,7 @@ stt transcribe sample.wav --profile seminar --provider gpt-4o --terms-file terms
 - `corrections.json` (`--correct`)
 - `summary.md` (`--summarize`)
 - `prompt_terms.txt`, `knowledge_pack.json`, `run_manifest.json`
+- `pdf_extraction_jobs.json`, `pdf_extract/` (`--extract-pdfs`)
 
 Whisper와 최신 OpenAI STT 후보 비교:
 

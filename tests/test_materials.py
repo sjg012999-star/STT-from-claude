@@ -95,6 +95,21 @@ class MaterialsTest(unittest.TestCase):
         self.assertIn("InTesTinyTM", pack.prompt_terms)
         self.assertEqual(pack.warnings, ())
 
+    def test_pdf_materials_are_collected_without_becoming_prompt_terms(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            materials_dir = root / "materials"
+            materials_dir.mkdir()
+            pdf_path = materials_dir / "iacucci-2024.pdf"
+            pdf_path.write_bytes(b"%PDF-1.7 fake")
+
+            pack = load_material_pack([materials_dir])
+
+        self.assertEqual(pack.source_count, 0)
+        self.assertEqual(pack.pdf_sources, (str(pdf_path),))
+        self.assertEqual(pack.prompt_terms, ())
+        self.assertIn("PDF extraction is planned but not run", pack.warnings[0])
+
 
 if __name__ == "__main__":
     unittest.main()
