@@ -68,6 +68,9 @@ class ReferenceLookupTest(unittest.TestCase):
         self.assertTrue(
             any("query.bibliographic" in url for url in plans[0].search_urls)
         )
+        self.assertTrue(
+            any("api.semanticscholar.org" in url for url in plans[0].search_urls)
+        )
 
     def test_lookup_downloads_open_pdf_from_crossref_metadata(self):
         class FakeHttpClient:
@@ -248,6 +251,53 @@ class ReferenceLookupTest(unittest.TestCase):
         self.assertEqual(results[0].status, "metadata_found")
         self.assertEqual(results[0].title, "OpenAlex metadata")
         self.assertIsNone(results[0].error)
+
+    def test_lookup_falls_back_to_semantic_scholar_when_other_sources_have_no_pdf(self):
+        class FakeHttpClient:
+            def __init__(self):
+                self.json_urls = []
+                self.download_urls = []
+
+            def get_json(self, url):
+                self.json_urls.append(url)
+                if "api.crossref.org" in url:
+                    return {"message": {"title": ["Crossref title"], "DOI": "10.1000/test"}}
+                if "api.openalex.org" in url:
+                    return {"results": [{"title": "OpenAlex title", "doi": "https://doi.org/10.1000/test"}]}
+                return {
+                    "title": "Semantic Scholar title",
+                    "externalIds": {"DOI": "10.1000/test"},
+                    "openAccessPdf": {"url": "https://example.org/s2.pdf"},
+                }
+
+            def download(self, url):
+                self.download_urls.append(url)
+                return b"%PDF-1.7 semantic scholar"
+
+        pack = build_knowledge_pack(
+            [
+                SlideEvidence(
+                    slide_id="slide-1",
+                    title="Fallback",
+                    references=["Author et al. Journal 2026 doi:10.1000/test"],
+                )
+            ]
+        )
+        client = FakeHttpClient()
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            results = lookup_and_cache_references(
+                build_reference_lookup_plans(pack),
+                cache_dir=Path(tmpdir) / "reference_cache",
+                http_client=client,
+            )
+            cached_bytes = results[0].cached_pdf_path.read_bytes()
+
+        self.assertEqual(results[0].status, "downloaded")
+        self.assertEqual(results[0].title, "Semantic Scholar title")
+        self.assertTrue(any("api.semanticscholar.org" in url for url in client.json_urls))
+        self.assertEqual(client.download_urls, ["https://example.org/s2.pdf"])
+        self.assertEqual(cached_bytes, b"%PDF-1.7 semantic scholar")
 
 
 if __name__ == "__main__":

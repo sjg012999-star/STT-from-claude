@@ -237,15 +237,18 @@ def _result_from_plan(
 def _metadata_lookup_urls(plan: ReferenceLookupPlan) -> tuple[str, ...]:
     exact_crossref = []
     openalex = []
+    semantic_scholar = []
     broad_crossref = []
     for url in plan.search_urls:
         if "api.openalex.org/works" in url:
             openalex.append(url)
+        elif "api.semanticscholar.org/graph/v1/paper" in url:
+            semantic_scholar.append(url)
         elif "api.crossref.org/works" in url and "query.bibliographic" in url:
             broad_crossref.append(url)
         elif "api.crossref.org/works" in url:
             exact_crossref.append(url)
-    return tuple(_dedupe([*exact_crossref, *openalex, *broad_crossref]))
+    return tuple(_dedupe([*exact_crossref, *openalex, *semantic_scholar, *broad_crossref]))
 
 
 def _metadata_from_payload(payload: dict[str, Any]) -> dict[str, str | None]:
@@ -255,6 +258,8 @@ def _metadata_from_payload(payload: dict[str, Any]) -> dict[str, str | None]:
         results = payload.get("results") or []
         first = results[0] if results else {}
         return _openalex_metadata(first)
+    if "openAccessPdf" in payload or "externalIds" in payload:
+        return _semantic_scholar_metadata(payload)
     return {"doi": None, "title": None, "pdf_url": None}
 
 
@@ -279,6 +284,16 @@ def _openalex_metadata(work: dict[str, Any]) -> dict[str, str | None]:
         "pdf_url": _clean_optional(
             primary_location.get("pdf_url") or open_access.get("oa_url")
         ),
+    }
+
+
+def _semantic_scholar_metadata(work: dict[str, Any]) -> dict[str, str | None]:
+    external_ids = work.get("externalIds") or {}
+    open_access_pdf = work.get("openAccessPdf") or {}
+    return {
+        "doi": _clean_optional(external_ids.get("DOI")),
+        "title": _clean_optional(work.get("title")),
+        "pdf_url": _clean_optional(open_access_pdf.get("url")),
     }
 
 
@@ -318,10 +333,18 @@ def _build_search_urls(
         encoded_doi = quote(doi, safe="")
         urls.append(f"https://doi.org/{doi}")
         urls.append(f"https://api.crossref.org/works/{encoded_doi}")
+        urls.append(
+            "https://api.semanticscholar.org/graph/v1/paper/"
+            f"DOI:{encoded_doi}?fields=title,externalIds,openAccessPdf"
+        )
 
     encoded_query = quote(bibliographic_query)
     urls.append(f"https://api.crossref.org/works?query.bibliographic={encoded_query}")
     urls.append(f"https://api.openalex.org/works?search={encoded_query}")
+    urls.append(
+        "https://api.semanticscholar.org/graph/v1/paper/search?"
+        f"query={encoded_query}&limit=1&fields=title,externalIds,openAccessPdf"
+    )
     return tuple(_dedupe(urls))
 
 
