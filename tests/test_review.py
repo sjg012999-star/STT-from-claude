@@ -9,7 +9,9 @@ from stt_pipeline.review import (
     build_review_queue,
     filter_report_to_accepted_glossary_corrections,
     load_review_decisions,
+    review_items_from_dict,
     review_queue_to_dict,
+    render_review_html,
 )
 from stt_pipeline.transcript import TranscriptResult, TranscriptSegment
 
@@ -98,6 +100,44 @@ class ReviewTest(unittest.TestCase):
 
         self.assertEqual(len(filtered.applied_corrections), 1)
         self.assertEqual(filtered.applied_corrections[0].corrected, "InTesTiny")
+
+    def test_round_trips_review_queue_payload_to_items(self):
+        queue = build_review_queue(correction_report=_report_with_two_corrections())
+
+        restored = review_items_from_dict(review_queue_to_dict(queue))
+
+        self.assertEqual(restored, queue)
+
+    def test_review_queue_loader_rejects_invalid_status(self):
+        payload = review_queue_to_dict(
+            build_review_queue(correction_report=_report_with_two_corrections())
+        )
+        payload["items"][0]["status"] = "approved"
+
+        with self.assertRaisesRegex(ValueError, "invalid review status"):
+            review_items_from_dict(payload)
+
+    def test_renders_static_review_html_for_queue_decisions(self):
+        queue = build_review_queue(correction_report=_report_with_two_corrections())
+
+        html = render_review_html(queue, source_name="review_queue.json")
+
+        self.assertIn("STT Review Queue", html)
+        self.assertIn("review_decisions.json", html)
+        self.assertIn(f'data-item-id="{queue[0].item_id}"', html)
+        self.assertIn("glossary_candidate", html)
+        self.assertIn("Download decisions", html)
+        self.assertIn("review_queue.json", html)
+        self.assertIn('JSON.stringify({ items }, null, 2) + "\\n"', html)
+        self.assertIn(
+            '<a class="download-button" id="download" '
+            'download="review_decisions.json"',
+            html,
+        )
+        self.assertIn("data:application/json;charset=utf-8", html)
+        self.assertIn("encodeURIComponent(decisionsJson)", html)
+        self.assertIn("refreshDownloadLink()", html)
+        self.assertNotIn("{{ITEMS_JSON}}", html)
 
 
 if __name__ == "__main__":

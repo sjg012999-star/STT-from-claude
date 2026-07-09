@@ -42,6 +42,8 @@ from stt_pipeline.review import (
     build_review_queue,
     filter_report_to_accepted_glossary_corrections,
     load_review_decisions,
+    load_review_queue,
+    render_review_html,
     review_queue_to_dict,
 )
 from stt_pipeline.rich_summary import OpenAiRichSummarizer
@@ -70,9 +72,12 @@ def main(
 ) -> int:
     parser = _build_parser()
     args = parser.parse_args(argv)
-    active_transcriber = transcriber or RoutedSttTranscriber()
+
+    if args.command == "review-ui":
+        return _run_review_ui(args)
 
     if args.command in {"transcribe", "run"}:
+        active_transcriber = transcriber or RoutedSttTranscriber()
         return _run_transcribe(
             args,
             active_transcriber,
@@ -84,6 +89,7 @@ def main(
             command_runner=command_runner,
         )
     if args.command == "bakeoff":
+        active_transcriber = transcriber or RoutedSttTranscriber()
         return _run_bakeoff(
             args,
             active_transcriber,
@@ -180,7 +186,23 @@ def _build_parser() -> argparse.ArgumentParser:
     bakeoff.add_argument("--chunk-seconds", type=int, default=600)
     bakeoff.add_argument("--output", required=True)
 
+    review_ui = subparsers.add_parser("review-ui")
+    review_ui.add_argument("review_queue_path")
+    review_ui.add_argument("--output")
+
     return parser
+
+
+def _run_review_ui(args) -> int:
+    queue_path = Path(args.review_queue_path)
+    output_path = Path(args.output) if args.output else queue_path.with_suffix(".html")
+    items = load_review_queue(queue_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(
+        render_review_html(items, source_name=queue_path.name),
+        encoding="utf-8",
+    )
+    return 0
 
 
 def _run_transcribe(
@@ -662,14 +684,20 @@ def _maybe_write_review_queue(
         correction_report=correction_report,
         reference_lookup_results=tuple(reference_lookup_results),
     )
-    path = output_dir / "review_queue.json"
-    path.write_text(
+    queue_path = output_dir / "review_queue.json"
+    queue_path.write_text(
         json.dumps(review_queue_to_dict(items), ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    ui_path = output_dir / "review_queue.html"
+    ui_path.write_text(
+        render_review_html(items, source_name=queue_path.name),
         encoding="utf-8",
     )
     return {
         "enabled": True,
-        "path": str(path),
+        "path": str(queue_path),
+        "ui_path": str(ui_path),
         "item_count": len(items),
     }
 

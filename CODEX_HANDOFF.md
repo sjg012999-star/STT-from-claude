@@ -1,5 +1,11 @@
 # Codex Handoff - 2026-07-06
 
+## Latest Checkpoint - 2026-07-10
+
+- Static review UI implementation, CLI wiring, tests, and documentation are included on `codex/phase1-mvp`.
+- Browser QA confirmed desktop interactions, mobile layout without horizontal overflow, and decision JSON generation after status changes.
+- The QA pass found and fixed both an escaped-newline JavaScript bug and a fragile programmatic download path; regression assertions cover the generated script and native download link.
+
 ## Branch State
 
 - Original Claude branch: `claude/stt-conference-system-6bt09c`
@@ -30,6 +36,7 @@ Do not force-push or overwrite the original Claude branch. If Claude resumes wor
 - Added Semantic Scholar fallback, publisher-specific PDF fallback, metadata quality scores, and review flags to reference lookup results.
 - Added explicit additional research file input via `--additional-research-file`; loaded research notes are kept separate from STT prompt terms and passed only to source-labeled notes/rich summaries.
 - Added human review queue support via `--write-review-queue`; accepted glossary candidates can be applied with `--review-decisions-file`.
+- Added dependency-free static review UI generation: `--write-review-queue` now writes `review_queue.html`, and `stt review-ui` can regenerate it from an existing queue.
 - Added skipped-by-default optional integration checks for live reference/publisher fallback and configured PDF extractor scripts.
 - Added generic live web/reference search adapter via `--web-research-query` plus explicit `--web-research-endpoint`; results are merged only as `additional_research`.
 - Updated README and PLAN to reflect reference-first, deck-level slide analysis and transcript/slide mutual support.
@@ -57,12 +64,12 @@ Live OpenAI STT is wired behind `OpenAiSttTranscriber`, local `mlx-whisper` is r
 - `src/stt_pipeline/report.py`: SRT rendering from timestamped transcript segments.
 - `src/stt_pipeline/correct.py`: OpenAI structured correction adapter plus exact-change validation.
 - `src/stt_pipeline/glossary.py`: TSV glossary accumulation from applied corrections.
-- `src/stt_pipeline/review.py`: human review queue builder for glossary candidates and low-confidence reference metadata.
+- `src/stt_pipeline/review.py`: human review queue builder, validated queue loader, and dependency-free static review HTML renderer.
 - `src/stt_pipeline/summarize.py`: basic source-separated Markdown summary generation.
 - `src/stt_pipeline/rich_summary.py`: OpenAI structured rich summary adapter with source-label validation.
 - `src/stt_pipeline/notes.py`: deterministic source-separated enriched notes generation.
 - `src/stt_pipeline/vision_ocr.py`: OpenAI vision slide-photo OCR adapter using Responses API image inputs.
-- `src/stt_pipeline/cli.py`: `run`, `transcribe`, and `bakeoff` command handlers.
+- `src/stt_pipeline/cli.py`: `run`, `transcribe`, `bakeoff`, and `review-ui` command handlers.
 - `src/stt_pipeline/slide_extract.py`: OCR-text-to-slide-evidence heuristics.
 - `src/stt_pipeline/reference_lookup.py`: DOI/Crossref/OpenAlex/Semantic Scholar lookup planning plus metadata quality scoring, publisher PDF fallback, and open PDF cache adapter.
 - `src/stt_pipeline/pdf_tools.py`: command builder for the existing PDF figure/table extraction script.
@@ -83,7 +90,7 @@ Live OpenAI STT is wired behind `OpenAiSttTranscriber`, local `mlx-whisper` is r
 ## Next Implementation Order
 
 1. Add provider-specific web search integrations only behind explicit flags/config, if a real endpoint is chosen.
-2. Add a fuller review UI/UX path for approving/rejecting `review_queue.json` items, likely in the future Gradio app.
+2. Test the static review UI on real non-private samples; add Gradio and low-confidence audio links only if that workflow proves insufficient.
 3. Expand publisher fallback coverage only after optional integration samples prove value.
 
 Keep real cloud STT and OpenAI API calls behind adapters. Tests should use fakes and local fixtures, not paid network calls.
@@ -97,7 +104,7 @@ Use `--preprocess` to run ffmpeg before STT. Use `--correct` only when `OPENAI_M
 Use `--chunk-audio --chunk-seconds 600` for long recordings that may exceed STT file upload limits. Chunking runs after preprocessing, writes `audio_chunks/chunk_*.wav`, transcribes each chunk, and offsets timestamps before writing the combined transcript.
 Use `--correction-chunk-size` and `--correction-overlap` for long recordings; chunk provenance is written to `corrections.json` and `run_manifest.json`.
 Use `--save-glossary ./glossary.tsv` with `--correct` to accumulate applied correction pairs. The saved TSV can be passed back as `--terms-file`; only the `corrected` column is used as prompt terms.
-Use `--write-review-queue` to write `review_queue.json` containing glossary candidates and reference metadata that needs human review. If a reviewed queue has `status: accepted` for glossary candidates, pass it back with `--review-decisions-file` alongside `--save-glossary` to save only accepted candidates.
+Use `--write-review-queue` to write `review_queue.json` and `review_queue.html` containing glossary candidates and reference metadata that needs human review. The HTML supports search, filtering, approval/rejection, and downloads `review_decisions.json`; pass that file back with `--review-decisions-file` alongside `--save-glossary` to save only accepted candidates. Use `stt review-ui path/to/review_queue.json --output path/to/review_queue.html` to regenerate the UI without rerunning STT.
 `--summarize` currently uses deterministic profile templates, not an LLM summarizer.
 `--llm-summarize` uses `OPENAI_MODEL` through `OpenAiRichSummarizer` and writes `rich_summary.md`. It requires every generated item to carry one of the allowed source labels: `speaker_transcript`, `slide_text`, `reference_pdf`, or `additional_research`.
 `--additional-research-file` can be passed multiple times with `.md`, `.txt`, or `.json` research notes. It writes `additional_research.json` and passes those items to `notes.md` and `rich_summary.md` as `additional_research`; it does not affect STT prompt terms.

@@ -299,11 +299,12 @@ stt-conference/
 - [x] 레퍼런스 논문 조회 고도화 1차 (Crossref/OpenAlex/Semantic Scholar fallback, publisher별 PDF fallback, metadata 품질 flag)
 - [x] 명시적 추가 조사 파일 입력 (`--additional-research-file`, source-labeled evidence)
 - [x] 검수 큐 1차 (`review_queue.json`, glossary 후보 accepted 저장, low-quality metadata flag)
+- [x] 의존성 없는 정적 검수 UI (`review_queue.html`, 검색/필터/승인/거절/결정 JSON 다운로드)
 - [x] optional integration smoke checks (live reference/publisher fallback, PDF extractor script)
 - [x] live broad web/reference search adapter 1차 (`--web-research-query` + explicit endpoint)
 - [ ] 레퍼런스 논문 조회 고도화 2차 (provider-specific web search integrations, publisher fallback 확대)
 - [ ] 슬라이드-전사 정렬 + 통합 보강 노트 (출처 라벨 강제)
-- [ ] Gradio 웹 UI: 파일·자료 드롭, 교정/보강 승인·거부 버튼
+- [ ] Gradio 웹 UI: 파일·자료 드롭, 교정/보강 승인·거부 버튼 (정적 검수 UI의 실제 사용 샘플에서 필요성이 확인될 때)
 - [ ] 저신뢰 구간 오디오 클립 링크 (클릭 재생 검수)
 
 ### 하지 않기로 한 것 (명시)

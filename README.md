@@ -30,7 +30,7 @@
 - [x] OpenAI LLM 기반 source-labeled `rich_summary.md` 출력 옵션
 - [x] 명시적 추가 조사 파일(`--additional-research-file`)을 source-labeled evidence로 반영
 - [x] 명시적 web/reference search endpoint adapter (`--web-research-query`, 기본 비활성)
-- [x] glossary 후보와 낮은 품질 reference metadata를 위한 `review_queue.json` 검수 경로
+- [x] glossary 후보와 낮은 품질 reference metadata를 위한 `review_queue.json` + 정적 HTML 검수 경로
 - [x] Phase 1: MVP (CLI, 학회 프로필)
 - [ ] Phase 2: 회의/강연 프로필, 용어집 자동 누적
 - [ ] Phase 3: 웹 UI, 검수 도구
@@ -155,10 +155,19 @@ stt run sample.wav --profile seminar --provider gpt-4o --correct --save-glossary
 stt run sample.wav --profile seminar --provider gpt-4o --correct --lookup-references --write-review-queue --output out/seminar
 ```
 
-`--write-review-queue`는 적용된 교정쌍을 glossary 후보로, `metadata_quality_score`가 낮거나 `review_flags`가 있는 레퍼런스를 reference metadata 검수 항목으로 `review_queue.json`에 남깁니다. 사람이 각 항목의 `status`를 `accepted` 또는 `rejected`로 바꾼 뒤, accepted glossary 후보만 저장할 수 있습니다.
+`--write-review-queue`는 적용된 교정쌍을 glossary 후보로, `metadata_quality_score`가 낮거나 `review_flags`가 있는 레퍼런스를 reference metadata 검수 항목으로 `review_queue.json`에 남깁니다. 동시에 `review_queue.html`을 만들므로 JSON을 직접 편집할 필요가 없습니다. HTML에서 검색·필터·항목별 또는 일괄 승인/거절을 한 뒤 `Download decisions`를 누르면 기존 파이프라인이 읽을 수 있는 `review_decisions.json`이 내려받아집니다. 정적 파일이라 별도 서버나 추가 패키지가 필요하지 않습니다.
+
+기존 검수 큐로 HTML을 다시 생성:
 
 ```bash
-stt run sample.wav --profile seminar --provider gpt-4o --correct --save-glossary ./glossary.tsv --review-decisions-file out/seminar/review_queue.json --output out/seminar-reviewed
+stt review-ui out/seminar/review_queue.json --output out/seminar/review_queue.html
+open out/seminar/review_queue.html
+```
+
+다운로드한 결정 파일을 적용해 승인된 glossary 후보만 저장:
+
+```bash
+stt run sample.wav --profile seminar --provider gpt-4o --correct --save-glossary ./glossary.tsv --review-decisions-file ~/Downloads/review_decisions.json --output out/seminar-reviewed
 ```
 
 직접 만든 용어 힌트 파일만 추가:
@@ -173,7 +182,7 @@ stt transcribe sample.wav --profile seminar --provider gpt-4o --terms-file terms
 - `corrected_transcript.md` / `corrected_transcript.json` / `corrected_transcript.srt` (`--correct`)
 - `corrections.json` (`--correct`)
 - `glossary.tsv` 또는 지정 경로 (`--save-glossary`)
-- `review_queue.json` (`--write-review-queue`)
+- `review_queue.json` / `review_queue.html` (`--write-review-queue`)
 - `summary.md` (`--summarize`)
 - `rich_summary.md` (`--llm-summarize`)
 - `notes.md` (`--enrich-notes`)

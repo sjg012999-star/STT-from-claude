@@ -504,12 +504,16 @@ class CliTest(unittest.TestCase):
             )
 
             review_queue = json.loads((output_dir / "review_queue.json").read_text(encoding="utf-8"))
+            review_html = (output_dir / "review_queue.html").read_text(encoding="utf-8")
             manifest = json.loads((output_dir / "run_manifest.json").read_text(encoding="utf-8"))
 
         self.assertEqual(exit_code, 0)
         self.assertEqual(review_queue["items"][0]["kind"], "glossary_candidate")
         self.assertEqual(review_queue["items"][0]["status"], "pending")
+        self.assertIn("STT Review Queue", review_html)
+        self.assertIn("review_decisions.json", review_html)
         self.assertTrue(manifest["review_queue"]["enabled"])
+        self.assertEqual(manifest["review_queue"]["ui_path"], str(output_dir / "review_queue.html"))
 
     def test_run_can_save_glossary_from_accepted_review_decisions_only(self):
         transcriber = FakeTranscriber()
@@ -559,6 +563,42 @@ class CliTest(unittest.TestCase):
         self.assertEqual(exit_code, 0)
         self.assertIn("Transcript\tCorrected transcript", glossary)
         self.assertEqual(manifest["glossary"]["review_decisions_file"], str(decisions_path))
+
+    def test_review_ui_command_writes_static_html_for_review_queue(self):
+        corrector = FakeCorrector()
+        transcriber = FakeTranscriber()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            queue_path = root / "review_queue.json"
+            output_path = root / "review_queue.html"
+            correction_report = corrector.correct(
+                transcriber.transcribe(root / "sample.wav", provider="gpt-4o")
+            )
+            queue_path.write_text(
+                json.dumps(
+                    review_queue_to_dict(
+                        build_review_queue(correction_report=correction_report)
+                    ),
+                    ensure_ascii=False,
+                    indent=2,
+                ),
+                encoding="utf-8",
+            )
+
+            exit_code = main(
+                [
+                    "review-ui",
+                    str(queue_path),
+                    "--output",
+                    str(output_path),
+                ]
+            )
+            html = output_path.read_text(encoding="utf-8")
+
+        self.assertEqual(exit_code, 0)
+        self.assertIn("STT Review Queue", html)
+        self.assertIn("review_decisions.json", html)
+        self.assertIn("Corrected transcript", html)
 
     def test_run_can_configure_correction_chunking(self):
         transcriber = FakeTranscriber()
