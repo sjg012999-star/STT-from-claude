@@ -17,6 +17,7 @@ from stt_pipeline.report import render_srt
 from stt_pipeline.stt_provider import OpenAiSttTranscriber
 from stt_pipeline.summarize import build_basic_summary
 from stt_pipeline.transcript import TranscriptResult
+from stt_pipeline.vision_ocr import OpenAiSlideImageOcr
 
 
 def main(
@@ -24,6 +25,7 @@ def main(
     *,
     transcriber=None,
     corrector=None,
+    image_ocr=None,
     command_runner=None,
 ) -> int:
     parser = _build_parser()
@@ -35,10 +37,16 @@ def main(
             args,
             active_transcriber,
             corrector=corrector,
+            image_ocr=image_ocr,
             command_runner=command_runner,
         )
     if args.command == "bakeoff":
-        return _run_bakeoff(args, active_transcriber, command_runner=command_runner)
+        return _run_bakeoff(
+            args,
+            active_transcriber,
+            image_ocr=image_ocr,
+            command_runner=command_runner,
+        )
     parser.error("unknown command")
     return 2
 
@@ -53,6 +61,7 @@ def _build_parser() -> argparse.ArgumentParser:
     transcribe.add_argument("--provider")
     transcribe.add_argument("--terms-file")
     transcribe.add_argument("--pack", "--materials", action="append", dest="pack_paths")
+    transcribe.add_argument("--ocr-images", action="store_true")
     transcribe.add_argument("--preprocess", action="store_true")
     transcribe.add_argument("--correct", action="store_true")
     transcribe.add_argument("--summarize", action="store_true")
@@ -64,6 +73,7 @@ def _build_parser() -> argparse.ArgumentParser:
     run.add_argument("--provider")
     run.add_argument("--terms-file")
     run.add_argument("--pack", "--materials", action="append", dest="pack_paths")
+    run.add_argument("--ocr-images", action="store_true")
     run.add_argument("--preprocess", action="store_true")
     run.add_argument("--correct", action="store_true")
     run.add_argument("--summarize", action="store_true")
@@ -75,16 +85,24 @@ def _build_parser() -> argparse.ArgumentParser:
     bakeoff.add_argument("--providers", required=True)
     bakeoff.add_argument("--terms-file")
     bakeoff.add_argument("--pack", "--materials", action="append", dest="pack_paths")
+    bakeoff.add_argument("--ocr-images", action="store_true")
     bakeoff.add_argument("--preprocess", action="store_true")
     bakeoff.add_argument("--output", required=True)
 
     return parser
 
 
-def _run_transcribe(args, transcriber, *, corrector=None, command_runner=None) -> int:
+def _run_transcribe(
+    args,
+    transcriber,
+    *,
+    corrector=None,
+    image_ocr=None,
+    command_runner=None,
+) -> int:
     output_dir = Path(args.output)
     output_dir.mkdir(parents=True, exist_ok=True)
-    terms = _load_prompt_terms(args, output_dir)
+    terms = _load_prompt_terms(args, output_dir, image_ocr=image_ocr)
     audio_path, preprocess_manifest = _prepare_audio(args, output_dir, command_runner)
     result = transcriber.transcribe(
         audio_path,
@@ -120,10 +138,10 @@ def _run_transcribe(args, transcriber, *, corrector=None, command_runner=None) -
     return 0
 
 
-def _run_bakeoff(args, transcriber, *, command_runner=None) -> int:
+def _run_bakeoff(args, transcriber, *, image_ocr=None, command_runner=None) -> int:
     output_dir = Path(args.output)
     output_dir.mkdir(parents=True, exist_ok=True)
-    terms = _load_prompt_terms(args, output_dir)
+    terms = _load_prompt_terms(args, output_dir, image_ocr=image_ocr)
     audio_path, preprocess_manifest = _prepare_audio(args, output_dir, command_runner)
     providers = tuple(value.strip() for value in args.providers.split(",") if value.strip())
     results = []
@@ -163,11 +181,14 @@ def _prepare_audio(args, output_dir: Path, command_runner) -> tuple[Path, dict[s
     }
 
 
-def _load_prompt_terms(args, output_dir: Path) -> tuple[str, ...]:
+def _load_prompt_terms(args, output_dir: Path, *, image_ocr=None) -> tuple[str, ...]:
     terms = list(_read_terms(args.terms_file))
     pack_paths = tuple(getattr(args, "pack_paths", None) or ())
     if pack_paths:
-        pack = load_material_pack(pack_paths)
+        active_image_ocr = None
+        if getattr(args, "ocr_images", False):
+            active_image_ocr = image_ocr or OpenAiSlideImageOcr()
+        pack = load_material_pack(pack_paths, image_ocr=active_image_ocr)
         terms.extend(pack.prompt_terms)
         _write_material_pack(output_dir / "knowledge_pack.json", pack)
 

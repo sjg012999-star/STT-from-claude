@@ -19,6 +19,7 @@
 - [x] OpenAI STT adapter + provider bakeoff CLI → `src/stt_pipeline/stt_provider.py`, `src/stt_pipeline/cli.py`
 - [x] `stt run ... --pack ./materials` 기본 실행 흐름 → 텍스트/PPTX/OCR JSON 자료에서 STT prompt terms 생성
 - [x] 전처리 옵션, SRT 출력, OpenAI 교정 옵션, 기본 요약 출력
+- [x] OpenAI vision 기반 슬라이드 사진 OCR 옵션
 - [x] Phase 1: MVP (CLI, 학회 프로필)
 - [ ] Phase 2: 회의/강연 프로필, 용어집 자동 누적
 - [ ] Phase 3: 웹 UI, 검수 도구
@@ -55,12 +56,18 @@ stt transcribe sample.wav --profile seminar --provider gpt-4o --output out/semin
 stt run sample.wav --profile seminar --provider gpt-4o --pack ./materials --output out/seminar
 ```
 
-이후에는 녹음파일, 보강자료 폴더, `OPENAI_API_KEY`만 준비하면 됩니다. `--pack`은 현재 `.txt`, `.md`, `.pptx`, 슬라이드 OCR 결과 `.json`을 읽어 `prompt_terms.txt`와 `knowledge_pack.json`을 출력합니다. 원본 슬라이드 사진과 PDF 직접 OCR/파싱은 아직 자동 실행하지 않으며, 해당 파일이 있으면 출력 JSON의 `warnings`에 남깁니다.
+이후에는 녹음파일, 보강자료 폴더, `OPENAI_API_KEY`만 준비하면 됩니다. `--pack`은 현재 `.txt`, `.md`, `.pptx`, 슬라이드 OCR 결과 `.json`을 읽어 `prompt_terms.txt`와 `knowledge_pack.json`을 출력합니다. 슬라이드 사진(`.jpg`, `.jpeg`, `.png`, `.heic`)은 `--ocr-images`를 같이 주면 OpenAI vision으로 OCR합니다. PDF 직접 파싱은 아직 자동 실행하지 않으며, PDF가 있으면 출력 JSON의 `warnings`에 남깁니다.
+
+슬라이드 사진 OCR 포함:
+
+```bash
+stt run sample.wav --profile seminar --provider gpt-4o --pack ./materials --ocr-images --output out/seminar
+```
 
 전처리, 교정, 요약까지 포함:
 
 ```bash
-stt run sample.wav --profile seminar --provider gpt-4o --pack ./materials --preprocess --correct --summarize --output out/seminar
+stt run sample.wav --profile seminar --provider gpt-4o --pack ./materials --ocr-images --preprocess --correct --summarize --output out/seminar
 ```
 
 `--preprocess`는 `ffmpeg`로 16kHz mono/loudness-normalized WAV를 만든 뒤 STT에 넘깁니다. `--correct`는 OpenAI Responses API에 구조화된 교정 JSON을 요청하고, 실제 세그먼트에 존재하는 원문만 바꿉니다. `--summarize`는 전사/교정 결과를 분리한 기본 Markdown 요약을 만듭니다.

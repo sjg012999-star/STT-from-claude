@@ -78,6 +78,25 @@ class FakeCorrector:
         )
 
 
+class FakeImageOcr:
+    def __init__(self):
+        self.calls = []
+
+    def extract(self, image_path):
+        from stt_pipeline.slide_extract import SlideOcrInput
+
+        self.calls.append(Path(image_path))
+        return SlideOcrInput(
+            slide_id=Path(image_path).stem,
+            title="The future of AI in IBD clinical practice",
+            text_lines=[
+                "The future of AI in IBD clinical practice",
+                "Iacucci et al., Nature Reviews Gastroenterology & Hepatology 21, 510 (2024)",
+            ],
+            source_path=str(image_path),
+        )
+
+
 class CliTest(unittest.TestCase):
     def test_transcribe_writes_json_and_markdown_with_terms(self):
         transcriber = FakeTranscriber()
@@ -265,6 +284,44 @@ class CliTest(unittest.TestCase):
         self.assertEqual(corrections["applied_corrections"][0]["corrected"], "Corrected transcript")
         self.assertIn("# Seminar Summary", summary)
         self.assertEqual(corrector.calls[0]["prompt_terms"], ())
+
+    def test_run_can_ocr_image_materials(self):
+        transcriber = FakeTranscriber()
+        image_ocr = FakeImageOcr()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            audio_path = root / "sample.wav"
+            materials_dir = root / "materials"
+            output_dir = root / "out"
+            audio_path.write_bytes(b"fake audio")
+            materials_dir.mkdir()
+            image_path = materials_dir / "slide-27.jpg"
+            image_path.write_bytes(b"fake image")
+
+            exit_code = main(
+                [
+                    "run",
+                    str(audio_path),
+                    "--profile",
+                    "seminar",
+                    "--provider",
+                    "gpt-4o",
+                    "--pack",
+                    str(materials_dir),
+                    "--ocr-images",
+                    "--output",
+                    str(output_dir),
+                ],
+                transcriber=transcriber,
+                image_ocr=image_ocr,
+            )
+
+            pack_json = json.loads((output_dir / "knowledge_pack.json").read_text(encoding="utf-8"))
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(image_ocr.calls, [image_path])
+        self.assertEqual(pack_json["slide_count"], 1)
+        self.assertIn("Iacucci et al.", "\n".join(transcriber.calls[0]["prompt_terms"]))
 
 
 if __name__ == "__main__":

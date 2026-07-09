@@ -17,12 +17,10 @@ from stt_pipeline.slide_extract import SlideOcrInput, extract_slide_evidence
 
 
 TEXT_SUFFIXES = {".txt", ".md", ".markdown"}
+IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".heic"}
 SUPPORTED_SUFFIXES = {*TEXT_SUFFIXES, ".json", ".pptx"}
 UNSUPPORTED_MATERIAL_SUFFIXES = {
-    ".jpg",
-    ".jpeg",
-    ".png",
-    ".heic",
+    *IMAGE_SUFFIXES,
     ".pdf",
     ".ppt",
 }
@@ -42,6 +40,7 @@ def load_material_pack(
     paths: Iterable[str | Path],
     *,
     max_prompt_terms: int = 80,
+    image_ocr=None,
 ) -> MaterialPack:
     material_paths = tuple(Path(path) for path in paths)
     slides: list[SlideOcrInput] = []
@@ -49,10 +48,10 @@ def load_material_pack(
     warnings: list[str] = []
 
     for path in material_paths:
-        files, path_warnings = _expand_material_path(path)
+        files, path_warnings = _expand_material_path(path, image_ocr=image_ocr)
         warnings.extend(path_warnings)
         for file_path in files:
-            loaded, file_warnings = _load_material_file(file_path)
+            loaded, file_warnings = _load_material_file(file_path, image_ocr=image_ocr)
             warnings.extend(file_warnings)
             if loaded:
                 slides.extend(loaded)
@@ -100,30 +99,38 @@ def material_pack_to_dict(pack: MaterialPack) -> dict[str, object]:
     }
 
 
-def _expand_material_path(path: Path) -> tuple[tuple[Path, ...], tuple[str, ...]]:
+def _expand_material_path(path: Path, *, image_ocr) -> tuple[tuple[Path, ...], tuple[str, ...]]:
     if not path.exists():
         return (), (f"material path not found: {path}",)
     if path.is_file():
-        return ((path,) if path.suffix.casefold() in SUPPORTED_SUFFIXES else ()), _unsupported_warning(path)
+        suffix = path.suffix.casefold()
+        is_loadable = suffix in SUPPORTED_SUFFIXES or (
+            suffix in IMAGE_SUFFIXES and image_ocr is not None
+        )
+        return ((path,) if is_loadable else ()), _unsupported_warning(path, image_ocr=image_ocr)
 
     files = []
     warnings = []
     for child in sorted(value for value in path.rglob("*") if value.is_file()):
         suffix = child.suffix.casefold()
-        if suffix in SUPPORTED_SUFFIXES:
+        if suffix in SUPPORTED_SUFFIXES or (
+            suffix in IMAGE_SUFFIXES and image_ocr is not None
+        ):
             files.append(child)
         elif suffix in UNSUPPORTED_MATERIAL_SUFFIXES:
-            warnings.extend(_unsupported_warning(child))
+            warnings.extend(_unsupported_warning(child, image_ocr=image_ocr))
     return tuple(files), tuple(_dedupe(warnings))
 
 
-def _unsupported_warning(path: Path) -> tuple[str, ...]:
+def _unsupported_warning(path: Path, *, image_ocr=None) -> tuple[str, ...]:
     suffix = path.suffix.casefold()
     if suffix in TEXT_SUFFIXES or suffix in {".json", ".pptx"}:
         return ()
-    if suffix in {".jpg", ".jpeg", ".png", ".heic"}:
+    if suffix in IMAGE_SUFFIXES:
+        if image_ocr is not None:
+            return ()
         return (
-            f"image OCR is not wired for {path}; provide PPTX, text, or slide OCR JSON",
+            f"image OCR is disabled for {path}; pass --ocr-images or provide PPTX, text, or slide OCR JSON",
         )
     if suffix == ".pdf":
         return (
@@ -134,7 +141,7 @@ def _unsupported_warning(path: Path) -> tuple[str, ...]:
     return (f"unsupported material file skipped: {path}",)
 
 
-def _load_material_file(path: Path) -> tuple[tuple[SlideOcrInput, ...], tuple[str, ...]]:
+def _load_material_file(path: Path, *, image_ocr) -> tuple[tuple[SlideOcrInput, ...], tuple[str, ...]]:
     suffix = path.suffix.casefold()
     try:
         if suffix in TEXT_SUFFIXES:
@@ -143,9 +150,11 @@ def _load_material_file(path: Path) -> tuple[tuple[SlideOcrInput, ...], tuple[st
             return _load_json_slides(path), ()
         if suffix == ".pptx":
             return _load_pptx_slides(path), ()
+        if suffix in IMAGE_SUFFIXES and image_ocr is not None:
+            return (image_ocr.extract(path),), ()
     except (OSError, UnicodeDecodeError, ValueError, zipfile.BadZipFile) as exc:
         return (), (f"failed to load material file {path}: {exc}",)
-    return (), _unsupported_warning(path)
+    return (), _unsupported_warning(path, image_ocr=image_ocr)
 
 
 def _load_text_file(path: Path) -> SlideOcrInput:

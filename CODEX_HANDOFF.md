@@ -17,9 +17,10 @@ Do not force-push or overwrite the original Claude branch. If Claude resumes wor
 - Added OpenAI STT adapter and CLI outputs for `transcript.md` / `transcript.json`.
 - Added material-pack prompt term extraction for text, Markdown, PPTX, and slide OCR JSON.
 - Added optional ffmpeg preprocessing, SRT output, OpenAI structured correction, and basic Markdown summary output.
+- Added optional OpenAI vision OCR for slide photos via `--ocr-images`.
 - Updated README and PLAN to reflect reference-first, deck-level slide analysis and transcript/slide mutual support.
 
-Live OpenAI STT is wired behind `OpenAiSttTranscriber`, and optional OpenAI transcript correction is wired behind `OpenAiTranscriptCorrector`. Tests still use fakes and do not call paid or network APIs. Raw slide-image OCR, live web search, LLM-based rich summarization, and PDF parsing execution are not wired yet.
+Live OpenAI STT is wired behind `OpenAiSttTranscriber`, optional OpenAI transcript correction is wired behind `OpenAiTranscriptCorrector`, and optional slide-photo OCR is wired behind `OpenAiSlideImageOcr`. Tests still use fakes and do not call paid or network APIs. Live web search, LLM-based rich summarization, and PDF parsing execution are not wired yet.
 
 ## Current Repo Contents
 
@@ -38,6 +39,7 @@ Live OpenAI STT is wired behind `OpenAiSttTranscriber`, and optional OpenAI tran
 - `src/stt_pipeline/report.py`: SRT rendering from timestamped transcript segments.
 - `src/stt_pipeline/correct.py`: OpenAI structured correction adapter plus exact-change validation.
 - `src/stt_pipeline/summarize.py`: basic source-separated Markdown summary generation.
+- `src/stt_pipeline/vision_ocr.py`: OpenAI vision slide-photo OCR adapter using Responses API image inputs.
 - `src/stt_pipeline/cli.py`: `run`, `transcribe`, and `bakeoff` command handlers.
 - `src/stt_pipeline/slide_extract.py`: OCR-text-to-slide-evidence heuristics.
 - `src/stt_pipeline/pdf_tools.py`: command builder for the existing PDF figure/table extraction script.
@@ -48,8 +50,8 @@ Live OpenAI STT is wired behind `OpenAiSttTranscriber`, and optional OpenAI tran
 
 ## Next Implementation Order
 
-1. Add optional image/PDF material extraction adapters only after fixture-based tests and clear warnings are in place.
-2. Connect reference PDF acquisition to the existing figure/table extraction toolchain.
+1. Connect reference PDF acquisition to the existing figure/table extraction toolchain.
+2. Add PDF text/figure/table extraction execution behind explicit CLI flags.
 3. Add chunked correction for long recordings and preserve overlap provenance.
 4. Expand profile-specific summaries for lecture and meeting outputs.
 5. Add skipped integration tests for any optional external tool before wiring it into the CLI.
@@ -58,8 +60,9 @@ Live OpenAI STT is wired behind `OpenAiSttTranscriber`, and optional OpenAI tran
 Keep real cloud STT and OpenAI API calls behind adapters. Tests should use fakes and local fixtures, not paid network calls.
 OpenAI text model names must come from `OPENAI_MODEL`; use `OPENAI_VISION_MODEL` only when a distinct vision model is needed. Do not hardcode another provider model into the pipeline.
 The STT adapter already supports `gpt-4o`, `gpt-4o-mini`, `whisper-1`, and `diarize` provider aliases. Knowledge Pack remains optional; Phase 1 uses compact STT prompt hints, not heavy enrichment.
-`stt run ... --pack ./materials` now merges `--terms-file` with prompt terms extracted from `.txt`, `.md`, `.pptx`, and slide OCR `.json`. Raw slide images and PDFs are intentionally not auto-OCRed yet; the material pack records warnings so Claude/Codex does not mistake skipped files for parsed evidence.
+`stt run ... --pack ./materials` now merges `--terms-file` with prompt terms extracted from `.txt`, `.md`, `.pptx`, slide OCR `.json`, and slide photos when `--ocr-images` is passed. PDFs are intentionally not auto-parsed yet; the material pack records warnings so Claude/Codex does not mistake skipped files for parsed evidence.
 Use `--preprocess` to run ffmpeg before STT. Use `--correct` only when `OPENAI_MODEL` is set; it asks for structured correction JSON and applies only exact declared replacements. Use `--summarize` for the basic Markdown summary.
+Use `--ocr-images` only when `OPENAI_MODEL`/`OPENAI_VISION_MODEL` are configured and slide-photo OCR cost is acceptable.
 
 ## Conflict Guidance
 

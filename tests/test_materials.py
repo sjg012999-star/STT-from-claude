@@ -6,6 +6,25 @@ from pathlib import Path
 from stt_pipeline.materials import load_material_pack
 
 
+class FakeImageOcr:
+    def __init__(self):
+        self.calls = []
+
+    def extract(self, image_path):
+        from stt_pipeline.slide_extract import SlideOcrInput
+
+        self.calls.append(Path(image_path))
+        return SlideOcrInput(
+            slide_id=Path(image_path).stem,
+            title="Using InTesTinyTM for targeted nanoparticle design",
+            text_lines=[
+                "Using InTesTinyTM for targeted nanoparticle design",
+                "NHS-PEG5k-cRGD cyclo(Arg-Gly-Asp-D-Tyr-Lys) was compared across healthy and IBD intestinal media.",
+            ],
+            source_path=str(image_path),
+        )
+
+
 class MaterialsTest(unittest.TestCase):
     def test_loads_text_materials_as_prompt_terms(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -57,6 +76,23 @@ class MaterialsTest(unittest.TestCase):
         self.assertEqual(pack.slide_count, 1)
         self.assertIn("InTesTinyTM", pack.prompt_terms)
         self.assertIn("NHS-PEG5k-cRGD", pack.prompt_terms)
+        self.assertEqual(pack.warnings, ())
+
+    def test_image_materials_are_ocrd_when_extractor_is_provided(self):
+        image_ocr = FakeImageOcr()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            materials_dir = root / "materials"
+            materials_dir.mkdir()
+            image_path = materials_dir / "slide-23.jpg"
+            image_path.write_bytes(b"fake image")
+
+            pack = load_material_pack([materials_dir], image_ocr=image_ocr)
+
+        self.assertEqual(image_ocr.calls, [image_path])
+        self.assertEqual(pack.source_count, 1)
+        self.assertEqual(pack.slide_count, 1)
+        self.assertIn("InTesTinyTM", pack.prompt_terms)
         self.assertEqual(pack.warnings, ())
 
 
