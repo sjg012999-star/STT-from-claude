@@ -6,6 +6,10 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Iterable, Sequence
 
+from stt_pipeline.additional_research import (
+    additional_research_to_dict,
+    load_additional_research_files,
+)
 from stt_pipeline.audio_chunks import chunk_audio, merge_chunk_transcripts
 from stt_pipeline.correct import (
     OpenAiTranscriptCorrector,
@@ -86,6 +90,7 @@ def _build_parser() -> argparse.ArgumentParser:
     transcribe.add_argument("--provider")
     transcribe.add_argument("--terms-file")
     transcribe.add_argument("--pack", "--materials", action="append", dest="pack_paths")
+    transcribe.add_argument("--additional-research-file", action="append", dest="additional_research_files")
     transcribe.add_argument("--ocr-images", action="store_true")
     transcribe.add_argument("--extract-pdfs", action="store_true")
     transcribe.add_argument("--plan-reference-search", action="store_true")
@@ -110,6 +115,7 @@ def _build_parser() -> argparse.ArgumentParser:
     run.add_argument("--provider")
     run.add_argument("--terms-file")
     run.add_argument("--pack", "--materials", action="append", dest="pack_paths")
+    run.add_argument("--additional-research-file", action="append", dest="additional_research_files")
     run.add_argument("--ocr-images", action="store_true")
     run.add_argument("--extract-pdfs", action="store_true")
     run.add_argument("--plan-reference-search", action="store_true")
@@ -134,6 +140,7 @@ def _build_parser() -> argparse.ArgumentParser:
     bakeoff.add_argument("--providers", required=True)
     bakeoff.add_argument("--terms-file")
     bakeoff.add_argument("--pack", "--materials", action="append", dest="pack_paths")
+    bakeoff.add_argument("--additional-research-file", action="append", dest="additional_research_files")
     bakeoff.add_argument("--ocr-images", action="store_true")
     bakeoff.add_argument("--extract-pdfs", action="store_true")
     bakeoff.add_argument("--plan-reference-search", action="store_true")
@@ -161,6 +168,7 @@ def _run_transcribe(
     output_dir = Path(args.output)
     output_dir.mkdir(parents=True, exist_ok=True)
     terms, pack = _load_prompt_terms(args, output_dir, image_ocr=image_ocr)
+    additional_research_items = _load_additional_research(args, output_dir)
     reference_lookup_plans = _maybe_plan_reference_search(args, output_dir, pack)
     reference_lookup_results = _maybe_lookup_references(
         args,
@@ -212,6 +220,7 @@ def _run_transcribe(
             pdf_results=pdf_results,
             reference_lookup_plans=reference_lookup_plans,
             reference_lookup_results=reference_lookup_results,
+            additional_research_items=additional_research_items,
             correction_report=correction_report,
             summarizer=summarizer,
         )
@@ -223,6 +232,7 @@ def _run_transcribe(
             pdf_results=pdf_results,
             reference_lookup_plans=reference_lookup_plans,
             reference_lookup_results=reference_lookup_results,
+            additional_research_items=additional_research_items,
         )
     _write_run_manifest(
         output_dir / "run_manifest.json",
@@ -236,6 +246,7 @@ def _run_transcribe(
         llm_summarized=getattr(args, "llm_summarize", False),
         reference_lookup_planned=getattr(args, "plan_reference_search", False),
         references_looked_up=getattr(args, "lookup_references", False),
+        additional_research_manifest=_additional_research_manifest(additional_research_items),
         glossary_manifest=glossary_manifest,
         correction_manifest=_correction_manifest(args),
     )
@@ -246,6 +257,7 @@ def _run_bakeoff(args, transcriber, *, image_ocr=None, command_runner=None) -> i
     output_dir = Path(args.output)
     output_dir.mkdir(parents=True, exist_ok=True)
     terms, pack = _load_prompt_terms(args, output_dir, image_ocr=image_ocr)
+    _load_additional_research(args, output_dir)
     plans = _maybe_plan_reference_search(args, output_dir, pack)
     _maybe_lookup_references(args, output_dir, pack, plans, None)
     _maybe_extract_pdfs(args, output_dir, pack, command_runner)
@@ -358,6 +370,18 @@ def _load_prompt_terms(args, output_dir: Path, *, image_ocr=None):
     if prompt_terms:
         _write_prompt_terms(output_dir / "prompt_terms.txt", prompt_terms)
     return prompt_terms, pack
+
+
+def _load_additional_research(args, output_dir: Path):
+    paths = tuple(getattr(args, "additional_research_files", None) or ())
+    if not paths:
+        return ()
+    items = load_additional_research_files(paths)
+    (output_dir / "additional_research.json").write_text(
+        json.dumps(additional_research_to_dict(items), ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    return items
 
 
 def _maybe_extract_pdfs(
@@ -566,6 +590,7 @@ def _write_rich_summary(
     pdf_results,
     reference_lookup_plans,
     reference_lookup_results,
+    additional_research_items=(),
     correction_report: CorrectionReport | None,
     summarizer,
 ) -> None:
@@ -577,6 +602,7 @@ def _write_rich_summary(
         pdf_results=pdf_results,
         reference_lookup_plans=reference_lookup_plans,
         reference_lookup_results=reference_lookup_results,
+        additional_research_items=additional_research_items,
         correction_report=correction_report,
     )
     path.write_text(summary.markdown, encoding="utf-8")
@@ -590,6 +616,7 @@ def _write_enriched_notes(
     pdf_results,
     reference_lookup_plans=(),
     reference_lookup_results=(),
+    additional_research_items=(),
 ) -> None:
     notes = build_enriched_notes(
         result,
@@ -597,6 +624,7 @@ def _write_enriched_notes(
         pdf_results=pdf_results,
         reference_lookup_plans=reference_lookup_plans,
         reference_lookup_results=reference_lookup_results,
+        additional_research_items=additional_research_items,
     )
     path.write_text(notes.markdown, encoding="utf-8")
 
@@ -614,6 +642,7 @@ def _write_run_manifest(
     llm_summarized: bool,
     reference_lookup_planned: bool,
     references_looked_up: bool,
+    additional_research_manifest: dict[str, object],
     glossary_manifest: dict[str, object],
     correction_manifest: dict[str, object],
 ) -> None:
@@ -632,6 +661,7 @@ def _write_run_manifest(
                 "llm_summarized": llm_summarized,
                 "reference_lookup_planned": reference_lookup_planned,
                 "references_looked_up": references_looked_up,
+                "additional_research": additional_research_manifest,
                 "glossary": glossary_manifest,
                 "correction": correction_manifest,
             },
@@ -647,6 +677,14 @@ def _correction_manifest(args) -> dict[str, object]:
         "enabled": bool(getattr(args, "correct", False)),
         "chunk_size": getattr(args, "correction_chunk_size", None),
         "overlap": getattr(args, "correction_overlap", 1),
+    }
+
+
+def _additional_research_manifest(items) -> dict[str, object]:
+    return {
+        "enabled": bool(items),
+        "item_count": len(items),
+        "sources": [item.source_path for item in items],
     }
 
 

@@ -2,6 +2,7 @@ import json
 import unittest
 from pathlib import Path
 
+from stt_pipeline.additional_research import AdditionalResearchItem
 from stt_pipeline.reference_lookup import ReferenceLookupResult
 from stt_pipeline.rich_summary import OpenAiRichSummarizer
 from stt_pipeline.transcript import TranscriptResult, TranscriptSegment
@@ -119,6 +120,42 @@ class RichSummaryTest(unittest.TestCase):
         self.assertIn("reference_cache/paper.pdf", prompt)
         self.assertIn("publisher_pdf_fallback", prompt)
         self.assertIn("conflicting_doi", prompt)
+
+    def test_openai_rich_summarizer_includes_explicit_additional_research(self):
+        client = FakeClient(
+            {
+                "sections": [
+                    {
+                        "title": "External Context",
+                        "items": [
+                            {
+                                "text": "A web source supports the slide interpretation.",
+                                "source_label": "additional_research",
+                                "evidence": "research/open-web-notes.md",
+                            }
+                        ],
+                    }
+                ]
+            }
+        )
+        summarizer = OpenAiRichSummarizer(client=client, model="gpt-test")
+        research_item = AdditionalResearchItem(
+            source_path="research/open-web-notes.md",
+            title="InTesTiny nanoparticle context",
+            summary="RGD targeting appears in the slide figure.",
+            url="https://example.org/paper",
+            evidence="research/open-web-notes.md",
+        )
+
+        summarizer.summarize(
+            _transcript(),
+            additional_research_items=(research_item,),
+        )
+
+        prompt = json.dumps(client.responses.calls[0]["input"])
+        self.assertIn("Additional research evidence", prompt)
+        self.assertIn("InTesTiny nanoparticle context", prompt)
+        self.assertIn("https://example.org/paper", prompt)
 
     def test_openai_rich_summarizer_rejects_unlabeled_or_unknown_sources(self):
         client = FakeClient(

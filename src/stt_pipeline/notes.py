@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from stt_pipeline.additional_research import AdditionalResearchItem
 from stt_pipeline.materials import MaterialPack
 from stt_pipeline.pdf_tools import PdfExtractionResult
 from stt_pipeline.reference_lookup import ReferenceLookupPlan, ReferenceLookupResult
@@ -20,6 +21,7 @@ def build_enriched_notes(
     pdf_results: tuple[PdfExtractionResult, ...] = (),
     reference_lookup_plans: tuple[ReferenceLookupPlan, ...] = (),
     reference_lookup_results: tuple[ReferenceLookupResult, ...] = (),
+    additional_research_items: tuple[AdditionalResearchItem, ...] = (),
 ) -> EnrichedNotes:
     lines = [
         "# Enriched Notes",
@@ -46,7 +48,11 @@ def build_enriched_notes(
         "",
         "_source: additional_research_",
         "",
-        *_additional_research_lines(reference_lookup_plans, reference_lookup_results),
+        *_additional_research_lines(
+            reference_lookup_plans,
+            reference_lookup_results,
+            additional_research_items,
+        ),
         "",
         "## Needs Review",
         "",
@@ -114,9 +120,20 @@ def _pdf_lines(
 def _additional_research_lines(
     reference_lookup_plans: tuple[ReferenceLookupPlan, ...],
     reference_lookup_results: tuple[ReferenceLookupResult, ...],
+    additional_research_items: tuple[AdditionalResearchItem, ...],
 ) -> list[str]:
+    lines = [
+        "- {title} | source: `{source}` | url: {url} | evidence: {evidence} | summary: {summary}".format(
+            title=item.title,
+            source=item.source_path,
+            url=item.url or "not provided",
+            evidence=item.evidence or item.source_path,
+            summary=item.summary,
+        )
+        for item in additional_research_items
+    ]
     if reference_lookup_results:
-        return [
+        lines.extend(
             "- {reference} | status: {status} | source: {source} | quality: {quality} | title: {title} | pdf: {pdf} | review: {review}".format(
                 reference=result.reference,
                 status=result.status,
@@ -127,12 +144,14 @@ def _additional_research_lines(
                 review=", ".join(result.review_flags) or "none",
             )
             for result in reference_lookup_results
-        ]
+        )
+        return lines
     if not reference_lookup_plans:
+        if lines:
+            return lines
         return [
             "- Not run. Add explicit reference search/acquisition before treating this section as evidence."
         ]
-    lines = []
     for plan in reference_lookup_plans:
         urls = ", ".join(plan.search_urls[:3])
         lines.append(

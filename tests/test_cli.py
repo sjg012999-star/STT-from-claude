@@ -110,6 +110,7 @@ class FakeRichSummarizer:
         pdf_results=(),
         reference_lookup_plans=(),
         reference_lookup_results=(),
+        additional_research_items=(),
         correction_report=None,
     ):
         from stt_pipeline.rich_summary import RichSummaryResult
@@ -122,6 +123,7 @@ class FakeRichSummarizer:
                 "pdf_results": tuple(pdf_results),
                 "reference_lookup_plans": tuple(reference_lookup_plans),
                 "reference_lookup_results": tuple(reference_lookup_results),
+                "additional_research_items": tuple(additional_research_items),
                 "correction_report": correction_report,
             }
         )
@@ -827,6 +829,56 @@ class CliTest(unittest.TestCase):
         self.assertIn("# Rich Summary", rich_summary)
         self.assertEqual(len(summarizer.calls), 1)
         self.assertTrue(manifest["llm_summarized"])
+
+    def test_run_can_load_explicit_additional_research_file_for_notes_and_rich_summary(self):
+        transcriber = FakeTranscriber()
+        summarizer = FakeRichSummarizer()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            audio_path = root / "sample.wav"
+            research_path = root / "open-web-notes.md"
+            output_dir = root / "out"
+            audio_path.write_bytes(b"fake audio")
+            research_path.write_text(
+                "# InTesTiny nanoparticle context\n\n"
+                "Source: https://example.org/paper\n\n"
+                "- RGD targeting appears in the slide figure.\n",
+                encoding="utf-8",
+            )
+
+            exit_code = main(
+                [
+                    "run",
+                    str(audio_path),
+                    "--profile",
+                    "seminar",
+                    "--provider",
+                    "gpt-4o",
+                    "--additional-research-file",
+                    str(research_path),
+                    "--enrich-notes",
+                    "--llm-summarize",
+                    "--output",
+                    str(output_dir),
+                ],
+                transcriber=transcriber,
+                summarizer=summarizer,
+            )
+
+            research_payload = json.loads(
+                (output_dir / "additional_research.json").read_text(encoding="utf-8")
+            )
+            notes = (output_dir / "notes.md").read_text(encoding="utf-8")
+            manifest = json.loads((output_dir / "run_manifest.json").read_text(encoding="utf-8"))
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(research_payload["items"][0]["title"], "InTesTiny nanoparticle context")
+        self.assertIn("RGD targeting appears", notes)
+        self.assertEqual(
+            summarizer.calls[0]["additional_research_items"][0].title,
+            "InTesTiny nanoparticle context",
+        )
+        self.assertTrue(manifest["additional_research"]["enabled"])
 
 
 if __name__ == "__main__":

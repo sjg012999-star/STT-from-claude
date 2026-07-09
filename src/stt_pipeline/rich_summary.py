@@ -4,6 +4,7 @@ import json
 from dataclasses import dataclass
 from typing import Any, Iterable
 
+from stt_pipeline.additional_research import AdditionalResearchItem
 from stt_pipeline.correct import CorrectionReport
 from stt_pipeline.llm_provider import build_openai_config_from_env
 from stt_pipeline.materials import MaterialPack
@@ -54,6 +55,7 @@ class OpenAiRichSummarizer:
         pdf_results: tuple[PdfExtractionResult, ...] = (),
         reference_lookup_plans: tuple[ReferenceLookupPlan, ...] = (),
         reference_lookup_results: tuple[ReferenceLookupResult, ...] = (),
+        additional_research_items: tuple[AdditionalResearchItem, ...] = (),
         correction_report: CorrectionReport | None = None,
     ) -> RichSummaryResult:
         client = self._client or _build_default_openai_client()
@@ -67,6 +69,7 @@ class OpenAiRichSummarizer:
                 pdf_results=pdf_results,
                 reference_lookup_plans=reference_lookup_plans,
                 reference_lookup_results=reference_lookup_results,
+                additional_research_items=additional_research_items,
                 correction_report=correction_report,
             ),
             text={"format": _rich_summary_json_schema()},
@@ -83,6 +86,7 @@ def _build_summary_input(
     pdf_results: tuple[PdfExtractionResult, ...],
     reference_lookup_plans: tuple[ReferenceLookupPlan, ...],
     reference_lookup_results: tuple[ReferenceLookupResult, ...],
+    additional_research_items: tuple[AdditionalResearchItem, ...],
     correction_report: CorrectionReport | None,
 ) -> list[dict[str, str]]:
     terms = ", ".join(_dedupe(prompt_terms)) or "none"
@@ -99,6 +103,7 @@ def _build_summary_input(
     pdf_context = _pdf_context(pdf_results)
     lookup_context = _lookup_context(reference_lookup_plans)
     lookup_result_context = _lookup_result_context(reference_lookup_results)
+    additional_research_context = _additional_research_context(additional_research_items)
     correction_context = _correction_context(correction_report)
     return [
         {
@@ -125,6 +130,8 @@ def _build_summary_input(
                 f"{lookup_context}\n\n"
                 "Reference lookup results:\n"
                 f"{lookup_result_context}\n\n"
+                "Additional research evidence:\n"
+                f"{additional_research_context}\n\n"
                 "Transcript correction context:\n"
                 f"{correction_context}\n\n"
                 "Return sections with title and items. Each item needs text, "
@@ -261,6 +268,23 @@ def _lookup_result_context(
             review=", ".join(result.review_flags) or "none",
         )
         for result in reference_lookup_results
+    )
+
+
+def _additional_research_context(
+    additional_research_items: tuple[AdditionalResearchItem, ...],
+) -> str:
+    if not additional_research_items:
+        return "none"
+    return "\n".join(
+        "{title} | {source} | {url} | {evidence} | {summary}".format(
+            title=item.title,
+            source=item.source_path,
+            url=item.url or "no url",
+            evidence=item.evidence or item.source_path,
+            summary=item.summary,
+        )
+        for item in additional_research_items
     )
 
 

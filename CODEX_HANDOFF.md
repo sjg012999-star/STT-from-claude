@@ -28,9 +28,10 @@ Do not force-push or overwrite the original Claude branch. If Claude resumes wor
 - Added source-separated enriched notes output via `--enrich-notes`.
 - Added OpenAI LLM source-labeled rich summary output via `--llm-summarize`.
 - Added Semantic Scholar fallback, publisher-specific PDF fallback, metadata quality scores, and review flags to reference lookup results.
+- Added explicit additional research file input via `--additional-research-file`; loaded research notes are kept separate from STT prompt terms and passed only to source-labeled notes/rich summaries.
 - Updated README and PLAN to reflect reference-first, deck-level slide analysis and transcript/slide mutual support.
 
-Live OpenAI STT is wired behind `OpenAiSttTranscriber`, local `mlx-whisper` is routed only when `--provider mlx-whisper` is selected, optional OpenAI transcript correction is wired behind `OpenAiTranscriptCorrector`, optional slide-photo OCR is wired behind `OpenAiSlideImageOcr`, reference lookup planning is deterministic behind `--plan-reference-search`, live Crossref/OpenAlex/Semantic Scholar lookup plus publisher PDF fallback/open PDF caching is behind `--lookup-references`, optional PDF figure/table extraction execution is wired behind explicit CLI flags, deterministic source-separated notes are wired behind `--enrich-notes`, and OpenAI source-labeled rich summaries are wired behind `--llm-summarize`. Tests still use fakes and do not call paid or network APIs. Broad web search is not wired yet.
+Live OpenAI STT is wired behind `OpenAiSttTranscriber`, local `mlx-whisper` is routed only when `--provider mlx-whisper` is selected, optional OpenAI transcript correction is wired behind `OpenAiTranscriptCorrector`, optional slide-photo OCR is wired behind `OpenAiSlideImageOcr`, reference lookup planning is deterministic behind `--plan-reference-search`, live Crossref/OpenAlex/Semantic Scholar lookup plus publisher PDF fallback/open PDF caching is behind `--lookup-references`, optional PDF figure/table extraction execution is wired behind explicit CLI flags, deterministic source-separated notes are wired behind `--enrich-notes`, explicit external research files are wired behind `--additional-research-file`, and OpenAI source-labeled rich summaries are wired behind `--llm-summarize`. Tests still use fakes and do not call paid or network APIs. Live broad web search is not wired yet.
 
 ## Current Repo Contents
 
@@ -47,6 +48,7 @@ Live OpenAI STT is wired behind `OpenAiSttTranscriber`, local `mlx-whisper` is r
 - `src/stt_pipeline/transcript.py`: shared transcript result dataclasses.
 - `src/stt_pipeline/audio_chunks.py`: ffmpeg segment planning plus chunk transcript timestamp merging.
 - `src/stt_pipeline/materials.py`: material-pack loader for text, Markdown, PPTX, and slide OCR JSON prompt terms.
+- `src/stt_pipeline/additional_research.py`: explicit additional research note loader for `.md`, `.txt`, and `.json` source-labeled evidence.
 - `src/stt_pipeline/preprocess.py`: deterministic ffmpeg preprocess command builder and runner.
 - `src/stt_pipeline/report.py`: SRT rendering from timestamped transcript segments.
 - `src/stt_pipeline/correct.py`: OpenAI structured correction adapter plus exact-change validation.
@@ -62,6 +64,7 @@ Live OpenAI STT is wired behind `OpenAiSttTranscriber`, local `mlx-whisper` is r
 - `tests/test_knowledge_pack.py`: tests for prioritization, PDF extraction jobs, and transcript-slide alignment.
 - `tests/test_local_whisper.py`: tests for optional `mlx_whisper` command planning and JSON normalization.
 - `tests/test_audio_chunks.py`: tests for ffmpeg chunk planning and merged transcript offsets.
+- `tests/test_additional_research.py`: tests for explicit Markdown/JSON research-note ingestion.
 - `tests/test_slide_extract.py`: tests for OCR text classification into slide evidence.
 - `tests/test_reference_lookup.py`: tests for DOI extraction, reference lookup planning, fake Crossref/OpenAlex/Semantic Scholar metadata, publisher fallback, review flags, and PDF cache.
 - `tests/test_pdf_tools.py`: tests for PDF extraction command planning.
@@ -72,9 +75,9 @@ Live OpenAI STT is wired behind `OpenAiSttTranscriber`, local `mlx-whisper` is r
 
 ## Next Implementation Order
 
-1. Add optional broad web/reference search as explicit additional-research input, not as a default STT dependency.
-2. Add skipped integration checks for publisher PDF fallback and PDF extraction scripts before broadening defaults.
-3. Add a human review/acceptance path for glossary candidates and low-confidence reference metadata.
+1. Add skipped integration checks for publisher PDF fallback and PDF extraction scripts before broadening defaults.
+2. Add a human review/acceptance path for glossary candidates and low-confidence reference metadata.
+3. Add a live broad web/reference search adapter only behind an explicit flag or external tool handoff; do not make it part of default STT.
 
 Keep real cloud STT and OpenAI API calls behind adapters. Tests should use fakes and local fixtures, not paid network calls.
 OpenAI text model names must come from `OPENAI_MODEL`; use `OPENAI_VISION_MODEL` only when a distinct vision model is needed. Do not hardcode another provider model into the pipeline.
@@ -89,7 +92,8 @@ Use `--correction-chunk-size` and `--correction-overlap` for long recordings; ch
 Use `--save-glossary ./glossary.tsv` with `--correct` to accumulate applied correction pairs. The saved TSV can be passed back as `--terms-file`; only the `corrected` column is used as prompt terms.
 `--summarize` currently uses deterministic profile templates, not an LLM summarizer.
 `--llm-summarize` uses `OPENAI_MODEL` through `OpenAiRichSummarizer` and writes `rich_summary.md`. It requires every generated item to carry one of the allowed source labels: `speaker_transcript`, `slide_text`, `reference_pdf`, or `additional_research`.
-`--enrich-notes` writes `notes.md` with explicit source sections: speaker transcript, slide text, reference PDF, additional research, and needs review. If `--plan-reference-search` is used, additional research includes planned lookup URLs; if `--lookup-references` is used, it includes lookup status, metadata source, quality score, review flags, title, and cached PDF path when available.
+`--additional-research-file` can be passed multiple times with `.md`, `.txt`, or `.json` research notes. It writes `additional_research.json` and passes those items to `notes.md` and `rich_summary.md` as `additional_research`; it does not affect STT prompt terms.
+`--enrich-notes` writes `notes.md` with explicit source sections: speaker transcript, slide text, reference PDF, additional research, and needs review. If `--plan-reference-search` is used, additional research includes planned lookup URLs; if `--lookup-references` is used, it includes lookup status, metadata source, quality score, review flags, title, and cached PDF path when available. If `--additional-research-file` is used, external research items appear in the same section with source path, URL, evidence, and summary.
 Use `--ocr-images` only when `OPENAI_MODEL`/`OPENAI_VISION_MODEL` are configured and slide-photo OCR cost is acceptable.
 Use `--extract-pdfs` only with an explicit extractor script path. The command runner executes the existing figure/table workflow and writes `pdf_extraction_jobs.json`; tests use fake runners.
 

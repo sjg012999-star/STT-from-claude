@@ -28,6 +28,7 @@
 - [x] 적용된 교정쌍을 TSV glossary로 저장/재사용
 - [x] source label 기반 `notes.md` 보강 노트 출력
 - [x] OpenAI LLM 기반 source-labeled `rich_summary.md` 출력 옵션
+- [x] 명시적 추가 조사 파일(`--additional-research-file`)을 source-labeled evidence로 반영
 - [x] Phase 1: MVP (CLI, 학회 프로필)
 - [ ] Phase 2: 회의/강연 프로필, 용어집 자동 누적
 - [ ] Phase 3: 웹 UI, 검수 도구
@@ -104,6 +105,14 @@ stt run sample.wav --profile seminar --provider gpt-4o --pack ./materials --look
 
 `--lookup-references`는 실제 네트워크 조회를 수행합니다. 현재는 Crossref를 먼저 보고, PDF가 없거나 조회가 실패하면 OpenAlex와 Semantic Scholar 후보까지 확인합니다. 그래도 PDF가 없으면 DOI 기반 publisher fallback URL(MDPI, PLOS, Frontiers, Nature/Springer, Wiley, ACS, Taylor & Francis 일부)을 시도합니다. open PDF 링크가 있으면 `reference_cache/*.pdf`로 저장한 뒤 `reference_lookup_results.json`에 `metadata_source`, `metadata_quality_score`, `review_flags`, `publisher_pdf_urls`와 함께 남깁니다. `--lookup-references --extract-pdfs --pdf-extractor-script ...`를 같이 쓰면 cache된 PDF가 기존 figure/table 추출 입력으로 바로 연결됩니다.
 
+명시적 추가 조사 파일 포함:
+
+```bash
+stt run sample.wav --profile seminar --provider gpt-4o --pack ./materials --additional-research-file ./research/open-web-notes.md --enrich-notes --llm-summarize --output out/seminar
+```
+
+`--additional-research-file`은 직접 조사한 웹 검색 결과, 논문 후보, 강연자 정보, 검증 메모를 `.md`, `.txt`, `.json` 파일로 넣는 명시적 입력입니다. pipeline이 자체적으로 broad web search를 기본 실행하지는 않습니다. 입력 파일은 `additional_research.json`에 보존되고, `notes.md`와 `rich_summary.md`의 `additional_research` 근거로만 사용됩니다.
+
 전처리, 교정, 요약까지 포함:
 
 ```bash
@@ -149,6 +158,7 @@ stt transcribe sample.wav --profile seminar --provider gpt-4o --terms-file terms
 - `audio_chunks/chunk_*.wav` (`--chunk-audio`)
 - `reference_lookup_jobs.json` (`--plan-reference-search`)
 - `reference_lookup_results.json`, `reference_cache/*.pdf` (`--lookup-references`)
+- `additional_research.json` (`--additional-research-file`)
 - `pdf_extraction_jobs.json`, `pdf_extract/` (`--extract-pdfs`)
 
 Whisper와 최신 OpenAI STT 후보 비교:

@@ -5,6 +5,7 @@ import unittest
 from stt_pipeline.materials import load_material_pack
 from stt_pipeline.notes import build_enriched_notes
 from stt_pipeline.pdf_tools import PdfExtractionResult
+from stt_pipeline.additional_research import AdditionalResearchItem
 from stt_pipeline.reference_lookup import ReferenceLookupResult
 from stt_pipeline.transcript import TranscriptResult, TranscriptSegment
 
@@ -107,6 +108,36 @@ class NotesTest(unittest.TestCase):
         self.assertIn("source: openalex", notes.markdown)
         self.assertIn("quality: 60", notes.markdown)
         self.assertIn("review: conflicting_doi, pdf_missing", notes.markdown)
+
+    def test_notes_include_explicit_additional_research_file_items(self):
+        transcript = TranscriptResult(
+            provider="gpt-4o",
+            model="gpt-4o-transcribe",
+            profile="seminar",
+            text="External research was provided.",
+            segments=(
+                TranscriptSegment(
+                    segment_id="seg_001",
+                    text="External research was provided.",
+                ),
+            ),
+        )
+        research_item = AdditionalResearchItem(
+            source_path="research/open-web-notes.md",
+            title="InTesTiny nanoparticle context",
+            summary="RGD targeting appears in the slide figure.",
+            url="https://example.org/paper",
+            evidence="research/open-web-notes.md",
+        )
+
+        notes = build_enriched_notes(
+            transcript,
+            additional_research_items=(research_item,),
+        )
+
+        self.assertIn("InTesTiny nanoparticle context", notes.markdown)
+        self.assertIn("https://example.org/paper", notes.markdown)
+        self.assertIn("RGD targeting appears", notes.markdown)
 
 
 if __name__ == "__main__":
