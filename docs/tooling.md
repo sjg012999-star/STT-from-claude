@@ -2,7 +2,7 @@
 
 This project should keep OCR, PDF parsing, web search, STT, and LLM calls behind adapters. Tests should use deterministic fixtures, not live services or paid APIs.
 
-`src/stt_pipeline/reference_lookup.py` currently creates deterministic DOI/Crossref/OpenAlex lookup plans only. Actual web lookup or PDF download should be added as a separate adapter step with fake-client tests first.
+`src/stt_pipeline/reference_lookup.py` creates deterministic DOI/Crossref/OpenAlex lookup plans and can, behind `--lookup-references`, perform Crossref metadata lookup plus open PDF caching. Tests use fake HTTP clients; do not add live network tests to the default suite.
 
 ## Current Default Path
 

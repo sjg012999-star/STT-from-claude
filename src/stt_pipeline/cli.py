@@ -22,8 +22,11 @@ from stt_pipeline.pdf_tools import (
 from stt_pipeline.preprocess import build_preprocess_plan, preprocess_audio
 from stt_pipeline.report import render_srt
 from stt_pipeline.reference_lookup import (
+    ReferenceLookupHttpClient,
     build_reference_lookup_plans,
+    lookup_and_cache_references,
     reference_lookup_plans_to_dict,
+    reference_lookup_results_to_dict,
 )
 from stt_pipeline.rich_summary import OpenAiRichSummarizer
 from stt_pipeline.stt_provider import OpenAiSttTranscriber
@@ -39,6 +42,7 @@ def main(
     corrector=None,
     image_ocr=None,
     summarizer=None,
+    reference_lookup_client=None,
     command_runner=None,
 ) -> int:
     parser = _build_parser()
@@ -52,6 +56,7 @@ def main(
             corrector=corrector,
             image_ocr=image_ocr,
             summarizer=summarizer,
+            reference_lookup_client=reference_lookup_client,
             command_runner=command_runner,
         )
     if args.command == "bakeoff":
@@ -78,6 +83,7 @@ def _build_parser() -> argparse.ArgumentParser:
     transcribe.add_argument("--ocr-images", action="store_true")
     transcribe.add_argument("--extract-pdfs", action="store_true")
     transcribe.add_argument("--plan-reference-search", action="store_true")
+    transcribe.add_argument("--lookup-references", action="store_true")
     transcribe.add_argument("--pdf-extractor-script")
     transcribe.add_argument("--pdf-page-render", action="store_true")
     transcribe.add_argument("--preprocess", action="store_true")
@@ -100,6 +106,7 @@ def _build_parser() -> argparse.ArgumentParser:
     run.add_argument("--ocr-images", action="store_true")
     run.add_argument("--extract-pdfs", action="store_true")
     run.add_argument("--plan-reference-search", action="store_true")
+    run.add_argument("--lookup-references", action="store_true")
     run.add_argument("--pdf-extractor-script")
     run.add_argument("--pdf-page-render", action="store_true")
     run.add_argument("--preprocess", action="store_true")
@@ -122,6 +129,7 @@ def _build_parser() -> argparse.ArgumentParser:
     bakeoff.add_argument("--ocr-images", action="store_true")
     bakeoff.add_argument("--extract-pdfs", action="store_true")
     bakeoff.add_argument("--plan-reference-search", action="store_true")
+    bakeoff.add_argument("--lookup-references", action="store_true")
     bakeoff.add_argument("--pdf-extractor-script")
     bakeoff.add_argument("--pdf-page-render", action="store_true")
     bakeoff.add_argument("--preprocess", action="store_true")
@@ -139,13 +147,27 @@ def _run_transcribe(
     corrector=None,
     image_ocr=None,
     summarizer=None,
+    reference_lookup_client=None,
     command_runner=None,
 ) -> int:
     output_dir = Path(args.output)
     output_dir.mkdir(parents=True, exist_ok=True)
     terms, pack = _load_prompt_terms(args, output_dir, image_ocr=image_ocr)
     reference_lookup_plans = _maybe_plan_reference_search(args, output_dir, pack)
-    pdf_results = _maybe_extract_pdfs(args, output_dir, pack, command_runner)
+    reference_lookup_results = _maybe_lookup_references(
+        args,
+        output_dir,
+        pack,
+        reference_lookup_plans,
+        reference_lookup_client,
+    )
+    pdf_results = _maybe_extract_pdfs(
+        args,
+        output_dir,
+        pack,
+        command_runner,
+        reference_lookup_results=reference_lookup_results,
+    )
     audio_path, preprocess_manifest = _prepare_audio(args, output_dir, command_runner)
     result, chunk_manifest = _transcribe_audio(
         args,
@@ -180,6 +202,7 @@ def _run_transcribe(
             material_pack=pack,
             pdf_results=pdf_results,
             reference_lookup_plans=reference_lookup_plans,
+            reference_lookup_results=reference_lookup_results,
             correction_report=correction_report,
             summarizer=summarizer,
         )
@@ -190,6 +213,7 @@ def _run_transcribe(
             material_pack=pack,
             pdf_results=pdf_results,
             reference_lookup_plans=reference_lookup_plans,
+            reference_lookup_results=reference_lookup_results,
         )
     _write_run_manifest(
         output_dir / "run_manifest.json",
@@ -202,6 +226,7 @@ def _run_transcribe(
         summarized=getattr(args, "summarize", False),
         llm_summarized=getattr(args, "llm_summarize", False),
         reference_lookup_planned=getattr(args, "plan_reference_search", False),
+        references_looked_up=getattr(args, "lookup_references", False),
         correction_manifest=_correction_manifest(args),
     )
     return 0
@@ -211,7 +236,8 @@ def _run_bakeoff(args, transcriber, *, image_ocr=None, command_runner=None) -> i
     output_dir = Path(args.output)
     output_dir.mkdir(parents=True, exist_ok=True)
     terms, pack = _load_prompt_terms(args, output_dir, image_ocr=image_ocr)
-    _maybe_plan_reference_search(args, output_dir, pack)
+    plans = _maybe_plan_reference_search(args, output_dir, pack)
+    _maybe_lookup_references(args, output_dir, pack, plans, None)
     _maybe_extract_pdfs(args, output_dir, pack, command_runner)
     audio_path, preprocess_manifest = _prepare_audio(args, output_dir, command_runner)
     providers = tuple(value.strip() for value in args.providers.split(",") if value.strip())
@@ -324,10 +350,29 @@ def _load_prompt_terms(args, output_dir: Path, *, image_ocr=None):
     return prompt_terms, pack
 
 
-def _maybe_extract_pdfs(args, output_dir: Path, pack, command_runner):
+def _maybe_extract_pdfs(
+    args,
+    output_dir: Path,
+    pack,
+    command_runner,
+    *,
+    reference_lookup_results=(),
+):
     if not getattr(args, "extract_pdfs", False):
         return ()
-    if pack is None or not pack.pdf_sources:
+    lookup_pdf_sources = tuple(
+        str(result.cached_pdf_path)
+        for result in reference_lookup_results
+        if result.cached_pdf_path is not None
+    )
+    pdf_sources = tuple(getattr(pack, "pdf_sources", ()) or ()) + lookup_pdf_sources
+    if pack is None and not pdf_sources:
+        (output_dir / "pdf_extraction_jobs.json").write_text(
+            json.dumps({"jobs": []}, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        return ()
+    if not pdf_sources:
         (output_dir / "pdf_extraction_jobs.json").write_text(
             json.dumps({"jobs": []}, ensure_ascii=False, indent=2),
             encoding="utf-8",
@@ -340,14 +385,14 @@ def _maybe_extract_pdfs(args, output_dir: Path, pack, command_runner):
         script_path=Path(args.pdf_extractor_script),
         page_render=bool(getattr(args, "pdf_page_render", False)),
     )
-    jobs = pack.knowledge_pack.pdf_extraction_jobs
+    jobs = pack.knowledge_pack.pdf_extraction_jobs if pack is not None else ()
     if not jobs:
         jobs = tuple(
-            _fallback_pdf_jobs(pack.pdf_sources)
+            _fallback_pdf_jobs(pdf_sources)
         )
     results = run_pdf_extraction_jobs(
         jobs,
-        pdf_paths=tuple(Path(path) for path in pack.pdf_sources),
+        pdf_paths=tuple(Path(path) for path in pdf_sources),
         out_dir=output_dir / "pdf_extract",
         config=config,
         runner=runner,
@@ -360,7 +405,7 @@ def _maybe_extract_pdfs(args, output_dir: Path, pack, command_runner):
 
 
 def _maybe_plan_reference_search(args, output_dir: Path, pack):
-    if not getattr(args, "plan_reference_search", False):
+    if not getattr(args, "plan_reference_search", False) and not getattr(args, "lookup_references", False):
         return ()
     if pack is None:
         plans = ()
@@ -371,6 +416,31 @@ def _maybe_plan_reference_search(args, output_dir: Path, pack):
         encoding="utf-8",
     )
     return plans
+
+
+def _maybe_lookup_references(
+    args,
+    output_dir: Path,
+    pack,
+    plans,
+    reference_lookup_client,
+):
+    if not getattr(args, "lookup_references", False):
+        return ()
+    active_plans = plans
+    if not active_plans and pack is not None:
+        active_plans = build_reference_lookup_plans(pack.knowledge_pack)
+    client = reference_lookup_client or ReferenceLookupHttpClient()
+    results = lookup_and_cache_references(
+        active_plans,
+        cache_dir=output_dir / "reference_cache",
+        http_client=client,
+    )
+    (output_dir / "reference_lookup_results.json").write_text(
+        json.dumps(reference_lookup_results_to_dict(results), ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    return results
 
 
 def _fallback_pdf_jobs(pdf_sources: tuple[str, ...]):
@@ -457,6 +527,7 @@ def _write_rich_summary(
     material_pack,
     pdf_results,
     reference_lookup_plans,
+    reference_lookup_results,
     correction_report: CorrectionReport | None,
     summarizer,
 ) -> None:
@@ -467,6 +538,7 @@ def _write_rich_summary(
         material_pack=material_pack,
         pdf_results=pdf_results,
         reference_lookup_plans=reference_lookup_plans,
+        reference_lookup_results=reference_lookup_results,
         correction_report=correction_report,
     )
     path.write_text(summary.markdown, encoding="utf-8")
@@ -479,12 +551,14 @@ def _write_enriched_notes(
     material_pack,
     pdf_results,
     reference_lookup_plans=(),
+    reference_lookup_results=(),
 ) -> None:
     notes = build_enriched_notes(
         result,
         material_pack=material_pack,
         pdf_results=pdf_results,
         reference_lookup_plans=reference_lookup_plans,
+        reference_lookup_results=reference_lookup_results,
     )
     path.write_text(notes.markdown, encoding="utf-8")
 
@@ -501,6 +575,7 @@ def _write_run_manifest(
     summarized: bool,
     llm_summarized: bool,
     reference_lookup_planned: bool,
+    references_looked_up: bool,
     correction_manifest: dict[str, object],
 ) -> None:
     path.write_text(
@@ -517,6 +592,7 @@ def _write_run_manifest(
                 "summarized": summarized,
                 "llm_summarized": llm_summarized,
                 "reference_lookup_planned": reference_lookup_planned,
+                "references_looked_up": references_looked_up,
                 "correction": correction_manifest,
             },
             ensure_ascii=False,

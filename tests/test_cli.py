@@ -109,6 +109,7 @@ class FakeRichSummarizer:
         material_pack=None,
         pdf_results=(),
         reference_lookup_plans=(),
+        reference_lookup_results=(),
         correction_report=None,
     ):
         from stt_pipeline.rich_summary import RichSummaryResult
@@ -120,6 +121,7 @@ class FakeRichSummarizer:
                 "material_pack": material_pack,
                 "pdf_results": tuple(pdf_results),
                 "reference_lookup_plans": tuple(reference_lookup_plans),
+                "reference_lookup_results": tuple(reference_lookup_results),
                 "correction_report": correction_report,
             }
         )
@@ -128,6 +130,31 @@ class FakeRichSummarizer:
             section_count=1,
             item_count=1,
         )
+
+
+class FakeReferenceLookupClient:
+    def __init__(self):
+        self.json_urls = []
+        self.download_urls = []
+
+    def get_json(self, url):
+        self.json_urls.append(url)
+        return {
+            "message": {
+                "title": ["Artificial intelligence in IBD clinical practice"],
+                "DOI": "10.1038/s41575-024-00913-8",
+                "link": [
+                    {
+                        "URL": "https://example.org/iacucci-2024.pdf",
+                        "content-type": "application/pdf",
+                    }
+                ],
+            }
+        }
+
+    def download(self, url):
+        self.download_urls.append(url)
+        return b"%PDF-1.7 fake paper"
 
 
 class CliTest(unittest.TestCase):
@@ -592,6 +619,113 @@ class CliTest(unittest.TestCase):
             "10.1038/s41575-024-00913-8",
         )
         self.assertIn("https://doi.org/10.1038/s41575-024-00913-8", notes)
+
+    def test_run_can_lookup_references_and_cache_open_pdf(self):
+        transcriber = FakeTranscriber()
+        reference_lookup_client = FakeReferenceLookupClient()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            audio_path = root / "sample.wav"
+            materials_dir = root / "materials"
+            output_dir = root / "out"
+            audio_path.write_bytes(b"fake audio")
+            materials_dir.mkdir()
+            (materials_dir / "slides.md").write_text(
+                "\n".join(
+                    [
+                        "The future of AI in IBD clinical practice",
+                        "Iacucci et al., Nat Rev Gastroenterol Hepatol. 2024;21:510. doi:10.1038/s41575-024-00913-8",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+
+            exit_code = main(
+                [
+                    "run",
+                    str(audio_path),
+                    "--profile",
+                    "seminar",
+                    "--provider",
+                    "gpt-4o",
+                    "--pack",
+                    str(materials_dir),
+                    "--lookup-references",
+                    "--enrich-notes",
+                    "--output",
+                    str(output_dir),
+                ],
+                transcriber=transcriber,
+                reference_lookup_client=reference_lookup_client,
+            )
+
+            lookup_results = json.loads(
+                (output_dir / "reference_lookup_results.json").read_text(encoding="utf-8")
+            )
+            notes = (output_dir / "notes.md").read_text(encoding="utf-8")
+            cached_pdf = output_dir / "reference_cache" / "10-1038-s41575-024-00913-8.pdf"
+            cached_pdf_bytes = cached_pdf.read_bytes()
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(lookup_results["references"][0]["status"], "downloaded")
+        self.assertEqual(cached_pdf_bytes, b"%PDF-1.7 fake paper")
+        self.assertIn("reference_cache/10-1038-s41575-024-00913-8.pdf", notes)
+
+    def test_run_can_extract_pdf_downloaded_from_reference_lookup(self):
+        transcriber = FakeTranscriber()
+        reference_lookup_client = FakeReferenceLookupClient()
+        runner_calls = []
+
+        def runner(command):
+            runner_calls.append(command)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            audio_path = root / "sample.wav"
+            materials_dir = root / "materials"
+            output_dir = root / "out"
+            script_path = root / "extract-figures-tables.py"
+            audio_path.write_bytes(b"fake audio")
+            materials_dir.mkdir()
+            script_path.write_text("# fake extractor\n", encoding="utf-8")
+            (materials_dir / "slides.md").write_text(
+                "\n".join(
+                    [
+                        "The future of AI in IBD clinical practice",
+                        "Iacucci et al., Nat Rev Gastroenterol Hepatol. 2024;21:510. doi:10.1038/s41575-024-00913-8",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+
+            exit_code = main(
+                [
+                    "run",
+                    str(audio_path),
+                    "--profile",
+                    "seminar",
+                    "--provider",
+                    "gpt-4o",
+                    "--pack",
+                    str(materials_dir),
+                    "--lookup-references",
+                    "--extract-pdfs",
+                    "--pdf-extractor-script",
+                    str(script_path),
+                    "--output",
+                    str(output_dir),
+                ],
+                transcriber=transcriber,
+                reference_lookup_client=reference_lookup_client,
+                command_runner=runner,
+            )
+
+            pdf_manifest = json.loads((output_dir / "pdf_extraction_jobs.json").read_text(encoding="utf-8"))
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(len(runner_calls), 1)
+        self.assertIn("reference_cache/10-1038-s41575-024-00913-8.pdf", " ".join(runner_calls[0]))
+        self.assertEqual(pdf_manifest["jobs"][0]["status"], "planned")
 
     def test_run_can_write_llm_rich_summary_with_source_labels(self):
         transcriber = FakeTranscriber()

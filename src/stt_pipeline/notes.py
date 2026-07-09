@@ -4,7 +4,7 @@ from dataclasses import dataclass
 
 from stt_pipeline.materials import MaterialPack
 from stt_pipeline.pdf_tools import PdfExtractionResult
-from stt_pipeline.reference_lookup import ReferenceLookupPlan
+from stt_pipeline.reference_lookup import ReferenceLookupPlan, ReferenceLookupResult
 from stt_pipeline.transcript import TranscriptResult
 
 
@@ -19,6 +19,7 @@ def build_enriched_notes(
     material_pack: MaterialPack | None = None,
     pdf_results: tuple[PdfExtractionResult, ...] = (),
     reference_lookup_plans: tuple[ReferenceLookupPlan, ...] = (),
+    reference_lookup_results: tuple[ReferenceLookupResult, ...] = (),
 ) -> EnrichedNotes:
     lines = [
         "# Enriched Notes",
@@ -45,7 +46,7 @@ def build_enriched_notes(
         "",
         "_source: additional_research_",
         "",
-        *_additional_research_lines(reference_lookup_plans),
+        *_additional_research_lines(reference_lookup_plans, reference_lookup_results),
         "",
         "## Needs Review",
         "",
@@ -112,7 +113,18 @@ def _pdf_lines(
 
 def _additional_research_lines(
     reference_lookup_plans: tuple[ReferenceLookupPlan, ...],
+    reference_lookup_results: tuple[ReferenceLookupResult, ...],
 ) -> list[str]:
+    if reference_lookup_results:
+        return [
+            "- {reference} | status: {status} | title: {title} | pdf: {pdf}".format(
+                reference=result.reference,
+                status=result.status,
+                title=result.title or "unknown",
+                pdf=result.cached_pdf_path or result.pdf_url or "not found",
+            )
+            for result in reference_lookup_results
+        ]
     if not reference_lookup_plans:
         return [
             "- Not run. Add explicit reference search/acquisition before treating this section as evidence."

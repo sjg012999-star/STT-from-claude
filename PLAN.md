@@ -277,8 +277,9 @@ stt-conference/
 - [x] Knowledge Pack **기본**: 텍스트/PPTX/OCR JSON 자료 → 용어 주입 (`--terms-file`과 병합)
 - [x] Knowledge Pack 확장 1차: 원본 슬라이드 사진 OCR 옵션 (`--ocr-images`)
 - [x] Knowledge Pack 확장 2차: 레퍼런스 DOI/검색 URL 계획 출력 (`--plan-reference-search`)
-- [x] Knowledge Pack 확장 3차: 명시적 PDF figure/table 추출 CLI 연결 (`--extract-pdfs`)
-- [x] Knowledge Pack 확장 4차: PDF 추출 결과와 자료 근거를 source label 기반 `notes.md`에 반영
+- [x] Knowledge Pack 확장 3차: Crossref metadata 조회 + open PDF cache (`--lookup-references`)
+- [x] Knowledge Pack 확장 4차: 명시적 PDF figure/table 추출 CLI 연결 (`--extract-pdfs`)
+- [x] Knowledge Pack 확장 5차: PDF 추출 결과와 자료 근거를 source label 기반 `notes.md`에 반영
 - [x] OpenAI 교정 계층 **기본**: structured outputs + 선언된 수정만 적용 + 거절 목록 기록
 - [x] 긴 전사용 청크 교정 옵션 + overlap provenance
 - [x] 프로필별 기본 요약: 세미나 talk flow, 강연 outline/key messages, 회의 decisions/action items
@@ -292,7 +293,7 @@ stt-conference/
 - [ ] Batch API 전환 (교정 비용 50% 절감)
 
 ### Phase 3 — Knowledge Pack 심화 + 편의성
-- [ ] 레퍼런스 논문 실제 조회/다운로드 (현재는 DOI/Crossref/OpenAlex URL 계획까지만)
+- [ ] 레퍼런스 논문 조회 고도화 (Semantic Scholar/OpenAlex fallback, publisher별 PDF fallback, metadata 품질 검수)
 - [ ] 슬라이드-전사 정렬 + 통합 보강 노트 (출처 라벨 강제)
 - [ ] Gradio 웹 UI: 파일·자료 드롭, 교정/보강 승인·거부 버튼
 - [ ] 저신뢰 구간 오디오 클립 링크 (클릭 재생 검수)

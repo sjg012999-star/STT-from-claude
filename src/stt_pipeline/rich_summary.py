@@ -8,7 +8,7 @@ from stt_pipeline.correct import CorrectionReport
 from stt_pipeline.llm_provider import build_openai_config_from_env
 from stt_pipeline.materials import MaterialPack
 from stt_pipeline.pdf_tools import PdfExtractionResult
-from stt_pipeline.reference_lookup import ReferenceLookupPlan
+from stt_pipeline.reference_lookup import ReferenceLookupPlan, ReferenceLookupResult
 from stt_pipeline.transcript import TranscriptResult
 
 
@@ -53,6 +53,7 @@ class OpenAiRichSummarizer:
         material_pack: MaterialPack | None = None,
         pdf_results: tuple[PdfExtractionResult, ...] = (),
         reference_lookup_plans: tuple[ReferenceLookupPlan, ...] = (),
+        reference_lookup_results: tuple[ReferenceLookupResult, ...] = (),
         correction_report: CorrectionReport | None = None,
     ) -> RichSummaryResult:
         client = self._client or _build_default_openai_client()
@@ -65,6 +66,7 @@ class OpenAiRichSummarizer:
                 material_pack=material_pack,
                 pdf_results=pdf_results,
                 reference_lookup_plans=reference_lookup_plans,
+                reference_lookup_results=reference_lookup_results,
                 correction_report=correction_report,
             ),
             text={"format": _rich_summary_json_schema()},
@@ -80,6 +82,7 @@ def _build_summary_input(
     material_pack: MaterialPack | None,
     pdf_results: tuple[PdfExtractionResult, ...],
     reference_lookup_plans: tuple[ReferenceLookupPlan, ...],
+    reference_lookup_results: tuple[ReferenceLookupResult, ...],
     correction_report: CorrectionReport | None,
 ) -> list[dict[str, str]]:
     terms = ", ".join(_dedupe(prompt_terms)) or "none"
@@ -95,6 +98,7 @@ def _build_summary_input(
     slide_context = _slide_context(material_pack)
     pdf_context = _pdf_context(pdf_results)
     lookup_context = _lookup_context(reference_lookup_plans)
+    lookup_result_context = _lookup_result_context(reference_lookup_results)
     correction_context = _correction_context(correction_report)
     return [
         {
@@ -119,6 +123,8 @@ def _build_summary_input(
                 f"{pdf_context}\n\n"
                 "Reference lookup plans:\n"
                 f"{lookup_context}\n\n"
+                "Reference lookup results:\n"
+                f"{lookup_result_context}\n\n"
                 "Transcript correction context:\n"
                 f"{correction_context}\n\n"
                 "Return sections with title and items. Each item needs text, "
@@ -236,6 +242,22 @@ def _lookup_context(reference_lookup_plans: tuple[ReferenceLookupPlan, ...]) -> 
     return "\n".join(
         f"{plan.reference} | {plan.status} | {', '.join(plan.search_urls[:3])}"
         for plan in reference_lookup_plans
+    )
+
+
+def _lookup_result_context(
+    reference_lookup_results: tuple[ReferenceLookupResult, ...],
+) -> str:
+    if not reference_lookup_results:
+        return "none"
+    return "\n".join(
+        "{reference} | {status} | {title} | {pdf}".format(
+            reference=result.reference,
+            status=result.status,
+            title=result.title or "unknown",
+            pdf=result.cached_pdf_path or result.pdf_url or "not found",
+        )
+        for result in reference_lookup_results
     )
 
 

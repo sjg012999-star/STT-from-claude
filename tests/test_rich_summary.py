@@ -1,6 +1,8 @@
 import json
 import unittest
+from pathlib import Path
 
+from stt_pipeline.reference_lookup import ReferenceLookupResult
 from stt_pipeline.rich_summary import OpenAiRichSummarizer
 from stt_pipeline.transcript import TranscriptResult, TranscriptSegment
 
@@ -72,6 +74,46 @@ class RichSummaryTest(unittest.TestCase):
         self.assertEqual(call["model"], "gpt-test")
         self.assertEqual(call["text"]["format"]["type"], "json_schema")
         self.assertIn("IBD", json.dumps(call["input"]))
+
+    def test_openai_rich_summarizer_includes_reference_lookup_results(self):
+        client = FakeClient(
+            {
+                "sections": [
+                    {
+                        "title": "Reference Context",
+                        "items": [
+                            {
+                                "text": "A reference PDF was cached for review.",
+                                "source_label": "additional_research",
+                                "evidence": "reference_cache/paper.pdf",
+                            }
+                        ],
+                    }
+                ]
+            }
+        )
+        summarizer = OpenAiRichSummarizer(client=client, model="gpt-test")
+        lookup_result = ReferenceLookupResult(
+            reference="Iacucci et al.",
+            bibliographic_query="Iacucci et al.",
+            source_slide_ids=("slide-27",),
+            priority_score=100,
+            lookup_url="https://api.crossref.org/works/10...",
+            doi="10.1038/example",
+            title="Reference title",
+            pdf_url="https://example.org/paper.pdf",
+            cached_pdf_path=Path("reference_cache/paper.pdf"),
+            status="downloaded",
+        )
+
+        summarizer.summarize(
+            _transcript(),
+            reference_lookup_results=(lookup_result,),
+        )
+
+        prompt = json.dumps(client.responses.calls[0]["input"])
+        self.assertIn("Reference lookup results", prompt)
+        self.assertIn("reference_cache/paper.pdf", prompt)
 
     def test_openai_rich_summarizer_rejects_unlabeled_or_unknown_sources(self):
         client = FakeClient(

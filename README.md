@@ -21,6 +21,7 @@
 - [x] 전처리 옵션, 긴 녹음 chunking 옵션, SRT 출력, OpenAI 교정 옵션, 기본 요약 출력
 - [x] OpenAI vision 기반 슬라이드 사진 OCR 옵션
 - [x] 레퍼런스 DOI/검색 URL 계획 출력 옵션
+- [x] Crossref 기반 레퍼런스 조회 및 open PDF cache 옵션
 - [x] 명시적 PDF figure/table 추출 실행 옵션
 - [x] 세미나/강연/회의 프로필별 기본 요약 섹션
 - [x] source label 기반 `notes.md` 보강 노트 출력
@@ -93,10 +94,18 @@ stt run sample.wav --profile seminar --provider gpt-4o --pack ./materials --plan
 
 `--plan-reference-search`는 네트워크 다운로드를 실행하지 않고, 슬라이드 레퍼런스에서 DOI와 Crossref/OpenAlex/DOI URL 후보를 만들어 `reference_lookup_jobs.json`에 남깁니다. DOI가 있으면 `planned`, DOI가 없으면 `needs_lookup`으로 표시합니다.
 
+레퍼런스 조회 및 open PDF cache:
+
+```bash
+stt run sample.wav --profile seminar --provider gpt-4o --pack ./materials --lookup-references --output out/seminar
+```
+
+`--lookup-references`는 실제 네트워크 조회를 수행합니다. 현재는 Crossref metadata에서 title/DOI/open PDF 링크를 찾고, PDF 링크가 있으면 `reference_cache/*.pdf`로 저장한 뒤 `reference_lookup_results.json`에 남깁니다. `--lookup-references --extract-pdfs --pdf-extractor-script ...`를 같이 쓰면 cache된 PDF가 기존 figure/table 추출 입력으로 바로 연결됩니다.
+
 전처리, 교정, 요약까지 포함:
 
 ```bash
-stt run sample.wav --profile seminar --provider gpt-4o --pack ./materials --ocr-images --preprocess --chunk-audio --correct --summarize --llm-summarize --plan-reference-search --enrich-notes --output out/seminar
+stt run sample.wav --profile seminar --provider gpt-4o --pack ./materials --ocr-images --preprocess --chunk-audio --correct --summarize --llm-summarize --lookup-references --enrich-notes --output out/seminar
 ```
 
 `--preprocess`는 `ffmpeg`로 16kHz mono/loudness-normalized WAV를 만든 뒤 STT에 넘깁니다. `--correct`는 OpenAI Responses API에 구조화된 교정 JSON을 요청하고, 실제 세그먼트에 존재하는 원문만 바꿉니다. `--summarize`는 전사/교정 결과를 분리한 기본 Markdown 요약을 만듭니다.
@@ -128,6 +137,7 @@ stt transcribe sample.wav --profile seminar --provider gpt-4o --terms-file terms
 - `prompt_terms.txt`, `knowledge_pack.json`, `run_manifest.json`
 - `audio_chunks/chunk_*.wav` (`--chunk-audio`)
 - `reference_lookup_jobs.json` (`--plan-reference-search`)
+- `reference_lookup_results.json`, `reference_cache/*.pdf` (`--lookup-references`)
 - `pdf_extraction_jobs.json`, `pdf_extract/` (`--extract-pdfs`)
 
 Whisper와 최신 OpenAI STT 후보 비교:
