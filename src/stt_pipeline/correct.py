@@ -4,6 +4,7 @@ import json
 from dataclasses import asdict, dataclass
 from typing import Any, Iterable
 
+from stt_pipeline.credentials import build_openai_client
 from stt_pipeline.llm_provider import build_openai_config_from_env
 from stt_pipeline.transcript import TranscriptResult, TranscriptSegment
 
@@ -306,8 +307,4 @@ def _dedupe_terms(terms: Iterable[str]) -> tuple[str, ...]:
 
 
 def _build_default_openai_client() -> Any:
-    try:
-        from openai import OpenAI
-    except ImportError as exc:
-        raise RuntimeError("Install the openai package to use OpenAI correction") from exc
-    return OpenAI()
+    return build_openai_client("OpenAI correction")

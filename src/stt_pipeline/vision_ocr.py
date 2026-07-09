@@ -6,6 +6,7 @@ import re
 from pathlib import Path
 from typing import Any
 
+from stt_pipeline.credentials import build_openai_client
 from stt_pipeline.llm_provider import build_openai_config_from_env
 from stt_pipeline.slide_extract import SlideOcrInput
 
@@ -119,8 +120,4 @@ def _clean_line(value: object) -> str:
 
 
 def _build_default_openai_client() -> Any:
-    try:
-        from openai import OpenAI
-    except ImportError as exc:
-        raise RuntimeError("Install the openai package to use OpenAI slide image OCR") from exc
-    return OpenAI()
+    return build_openai_client("OpenAI slide image OCR")

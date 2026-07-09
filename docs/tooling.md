@@ -10,9 +10,7 @@ This project should keep OCR, PDF parsing, web search, STT, and LLM calls behind
 
 `src/stt_pipeline/review.py` renders `review_queue.html` as a self-contained static file. It deliberately uses no Gradio/server dependency: the browser updates item statuses in memory and downloads a queue-shaped `review_decisions.json` that `--review-decisions-file` already accepts. Add a heavier review framework only after real review samples demonstrate a need for audio playback or server-side persistence.
 
-`src/stt_pipeline/local_whisper.py` is an optional command adapter for `mlx_whisper`; keep it as a fallback and do not add `mlx-whisper` as a hard runtime dependency.
-
-Optional integration tests live in `tests/test_optional_integrations.py`. They skip by default unless the relevant CLI is installed or `STT_RUN_LIVE_REFERENCE_TESTS=1` is set.
+Optional integration tests live in `tests/test_optional_integrations.py`. They skip by default unless `STT_RUN_LIVE_REFERENCE_TESTS=1` is set or the configured PDF extractor inputs are available.
 Set `STT_PDF_EXTRACTOR_SCRIPT` and `STT_PDF_SAMPLE` together to run the optional PDF extractor integration check. These checks are smoke tests only; keep deterministic unit tests as the default gate.
 
 ## Current Default Path

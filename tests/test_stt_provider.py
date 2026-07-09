@@ -92,34 +92,34 @@ class SttProviderTest(unittest.TestCase):
         self.assertEqual(call["model"], "gpt-4o-transcribe")
         self.assertIn("prompt", call)
 
-    def test_routed_transcriber_dispatches_mlx_whisper_provider(self):
+    def test_routed_transcriber_dispatches_gemini_audio_provider(self):
         class FakeOpenAi:
+            def transcribe(self, audio_path, *, provider=None, profile="seminar", prompt_terms=()):
+                raise AssertionError("OpenAI transcriber should not be called")
+
+        class FakeGemini:
             def __init__(self):
                 self.calls = []
 
             def transcribe(self, audio_path, *, provider=None, profile="seminar", prompt_terms=()):
-                self.calls.append(provider)
-                return _result(provider or "gpt-4o", "openai-model")
+                self.calls.append((provider, tuple(prompt_terms)))
+                return _result("gemini-audio", "gemini-test")
 
-        class FakeMlx:
-            def __init__(self):
-                self.calls = []
+        gemini = FakeGemini()
+        router = RoutedSttTranscriber(
+            openai_transcriber=FakeOpenAi(),
+            gemini_transcriber=gemini,
+        )
 
-            def transcribe(self, audio_path, *, provider=None, profile="seminar", prompt_terms=()):
-                self.calls.append(provider)
-                return _result("mlx-whisper", "mlx-model")
+        result = router.transcribe(
+            "sample.wav",
+            provider="gemini-audio",
+            profile="seminar",
+            prompt_terms=["InTesTiny"],
+        )
 
-        openai = FakeOpenAi()
-        mlx = FakeMlx()
-        router = RoutedSttTranscriber(openai_transcriber=openai, mlx_transcriber=mlx)
-
-        local_result = router.transcribe("sample.wav", provider="mlx-whisper", profile="seminar")
-        cloud_result = router.transcribe("sample.wav", provider="gpt-4o", profile="seminar")
-
-        self.assertEqual(local_result.provider, "mlx-whisper")
-        self.assertEqual(cloud_result.provider, "gpt-4o")
-        self.assertEqual(mlx.calls, ["mlx-whisper"])
-        self.assertEqual(openai.calls, ["gpt-4o"])
+        self.assertEqual(result.provider, "gemini-audio")
+        self.assertEqual(gemini.calls, [("gemini-audio", ("InTesTiny",))])
 
 
 def _result(provider, model):

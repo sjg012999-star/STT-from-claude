@@ -406,6 +406,80 @@ class CliTest(unittest.TestCase):
         self.assertTrue(manifest["chunking"]["enabled"])
         self.assertEqual(manifest["chunking"]["chunk_count"], 2)
 
+    def test_run_rejects_external_chunking_for_default_meeting_diarization(self):
+        transcriber = FakeTranscriber()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            audio_path = root / "meeting.wav"
+            output_dir = root / "out"
+            audio_path.write_bytes(b"meeting audio")
+
+            with self.assertRaisesRegex(ValueError, "speaker identities reset"):
+                main(
+                    [
+                        "run",
+                        str(audio_path),
+                        "--profile",
+                        "meeting",
+                        "--chunk-audio",
+                        "--output",
+                        str(output_dir),
+                    ],
+                    transcriber=transcriber,
+                )
+
+        self.assertEqual(transcriber.calls, [])
+
+    def test_bakeoff_rejects_diarize_when_external_chunking_is_enabled(self):
+        transcriber = FakeTranscriber()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            audio_path = root / "meeting.wav"
+            output_dir = root / "out"
+            audio_path.write_bytes(b"meeting audio")
+
+            with self.assertRaisesRegex(ValueError, "chunking_strategy=auto"):
+                main(
+                    [
+                        "bakeoff",
+                        str(audio_path),
+                        "--profile",
+                        "meeting",
+                        "--providers",
+                        "gpt-4o,diarize",
+                        "--chunk-audio",
+                        "--output",
+                        str(output_dir),
+                    ],
+                    transcriber=transcriber,
+                )
+
+        self.assertEqual(transcriber.calls, [])
+
+    def test_bakeoff_rejects_gemini_external_chunking(self):
+        transcriber = FakeTranscriber()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            audio_path = root / "seminar.wav"
+            output_dir = root / "out"
+            audio_path.write_bytes(b"seminar audio")
+
+            with self.assertRaisesRegex(ValueError, "whole-recording speaker"):
+                main(
+                    [
+                        "bakeoff",
+                        str(audio_path),
+                        "--providers",
+                        "gpt-4o,gemini-audio",
+                        "--chunk-audio",
+                        "--output",
+                        str(output_dir),
+                    ],
+                    transcriber=transcriber,
+                )
+
+        self.assertEqual(transcriber.calls, [])
+
     def test_run_can_write_corrected_transcript_and_summary(self):
         transcriber = FakeTranscriber()
         corrector = FakeCorrector()

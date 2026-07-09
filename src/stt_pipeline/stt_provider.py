@@ -4,7 +4,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable
 
-from stt_pipeline.local_whisper import MlxWhisperTranscriber
+from stt_pipeline.credentials import build_openai_client
+from stt_pipeline.gemini_audio import GeminiAudioTranscriber
 from stt_pipeline.transcript import TranscriptResult, TranscriptSegment
 
 
@@ -204,11 +205,7 @@ def _dedupe(values: Iterable[str]) -> tuple[str, ...]:
 
 
 def _build_default_openai_client() -> Any:
-    try:
-        from openai import OpenAI
-    except ImportError as exc:
-        raise RuntimeError("Install the openai package to use live STT transcription") from exc
-    return OpenAI()
+    return build_openai_client("live STT transcription")
 
 
 class RoutedSttTranscriber:
@@ -216,10 +213,10 @@ class RoutedSttTranscriber:
         self,
         *,
         openai_transcriber: Any | None = None,
-        mlx_transcriber: Any | None = None,
+        gemini_transcriber: Any | None = None,
     ):
         self._openai_transcriber = openai_transcriber or OpenAiSttTranscriber()
-        self._mlx_transcriber = mlx_transcriber or MlxWhisperTranscriber()
+        self._gemini_transcriber = gemini_transcriber or GeminiAudioTranscriber()
 
     def transcribe(
         self,
@@ -230,8 +227,8 @@ class RoutedSttTranscriber:
         prompt_terms: Iterable[str] = (),
     ) -> TranscriptResult:
         selected_provider = provider or default_provider_for_profile(profile)
-        if selected_provider == "mlx-whisper":
-            return self._mlx_transcriber.transcribe(
+        if selected_provider == "gemini-audio":
+            return self._gemini_transcriber.transcribe(
                 audio_path,
                 provider=selected_provider,
                 profile=profile,

@@ -2,7 +2,7 @@
 
 학회 세미나(주 용도), 강연, 회의 녹음(Zoom H1e)을 대상으로:
 
-1. 여러 억양의 **영어/한국어 음성 → 전사** (클라우드 STT 기본, mlx-whisper 폴백)
+1. 여러 억양의 **영어/한국어 음성 → 전사** (OpenAI/Gemini 클라우드 API)
 2. **앞뒤 문맥 기반 오인식 교정** (OpenAI API + Knowledge Pack 용어집)
 3. **교정 내역을 별도 표로 정리** (환각 방지 diff 검증 포함)
 4. 용도별 프로필(학회/강연/회의)에 맞는 **요약 정리**
@@ -17,7 +17,7 @@
 - [x] Phase 1 Knowledge Pack 우선순위 스캐폴드 → `src/stt_pipeline/knowledge_pack.py`
 - [x] OCR 텍스트/레퍼런스 PDF 추출 어댑터 경계 → `src/stt_pipeline/slide_extract.py`, `src/stt_pipeline/pdf_tools.py`
 - [x] OpenAI STT adapter + provider bakeoff CLI → `src/stt_pipeline/stt_provider.py`, `src/stt_pipeline/cli.py`
-- [x] 로컬 `mlx-whisper` fallback adapter → `src/stt_pipeline/local_whisper.py`
+- [x] 선택 가능한 OpenAI/Gemini STT provider와 동일 녹음 bake-off
 - [x] `stt run ... --pack ./materials` 기본 실행 흐름 → 텍스트/PPTX/OCR JSON 자료에서 STT prompt terms 생성
 - [x] 전처리 옵션, 긴 녹음 chunking 옵션, SRT 출력, OpenAI 교정 옵션, 기본 요약 출력
 - [x] OpenAI vision 기반 슬라이드 사진 OCR 옵션
@@ -40,14 +40,29 @@
 초기 1회 설치:
 
 ```bash
-python3 -m pip install -e .
+python3.12 -m venv .venv
+source .venv/bin/activate
+python -m pip install '.[gemini,pdf]'
 ```
 
-API 키 설정:
+API 키 설정은 환경변수를 우선 사용합니다:
 
 ```bash
 export OPENAI_API_KEY="..."
 ```
+
+macOS에서는 환경변수가 없을 때 로그인 Keychain의 `stt-conference-openai`
+서비스 항목을 자동으로 읽습니다. 이 Mac에는 해당 항목이 이미 설정되어 있으므로
+OpenAI 전사만 사용할 때는 키를 다시 입력하거나 `export`할 필요가 없습니다.
+
+Gemini 전사를 비교할 때만 별도 Gemini API 키를 설정합니다:
+
+```bash
+export GEMINI_API_KEY="..."
+export GEMINI_AUDIO_MODEL="gemini-3.5-flash"  # optional default
+```
+
+OpenAI가 기본 provider이며 Gemini는 명시적으로 `--provider gemini-audio`를 선택했을 때만 호출됩니다.
 
 교정 옵션까지 쓰려면 OpenAI 텍스트 모델도 환경변수로 지정:
 
@@ -61,13 +76,21 @@ export OPENAI_MODEL="your-openai-text-model"
 stt transcribe sample.wav --profile seminar --provider gpt-4o --output out/seminar
 ```
 
+Gemini Audio Understanding으로 동일 파일 전사:
+
+```bash
+stt transcribe sample.wav --profile seminar --provider gemini-audio --output out/gemini
+```
+
+Gemini는 전체 녹음 문맥을 유지하기 위해 Files API로 파일을 업로드하고 처리 후 원격 파일을 삭제합니다. `gemini-audio`에는 `--chunk-audio`를 함께 사용하지 않습니다.
+
 보강자료 폴더를 같이 넣어 한 번에 전사:
 
 ```bash
 stt run sample.wav --profile seminar --provider gpt-4o --pack ./materials --output out/seminar
 ```
 
-이후에는 녹음파일, 보강자료 폴더, `OPENAI_API_KEY`만 준비하면 됩니다. `--pack`은 현재 `.txt`, `.md`, `.pptx`, 슬라이드 OCR 결과 `.json`을 읽어 `prompt_terms.txt`와 `knowledge_pack.json`을 출력합니다. 슬라이드 사진(`.jpg`, `.jpeg`, `.png`, `.heic`)은 `--ocr-images`를 같이 주면 OpenAI vision으로 OCR합니다. PDF는 기본으로 STT prompt terms에 섞지 않고 `pdf_sources`와 warning에 남깁니다.
+이후에는 녹음파일과 선택적 보강자료 폴더만 준비하면 됩니다. 다른 컴퓨터에서는 `OPENAI_API_KEY` 환경변수 또는 같은 이름의 Keychain 항목도 필요합니다. `--pack`은 현재 `.txt`, `.md`, `.pptx`, 슬라이드 OCR 결과 `.json`을 읽어 `prompt_terms.txt`와 `knowledge_pack.json`을 출력합니다. 슬라이드 사진(`.jpg`, `.jpeg`, `.png`, `.heic`)은 `--ocr-images`를 같이 주면 OpenAI vision으로 OCR합니다. PDF는 기본으로 STT prompt terms에 섞지 않고 `pdf_sources`와 warning에 남깁니다.
 
 슬라이드 사진 OCR 포함:
 
@@ -81,7 +104,13 @@ stt run sample.wav --profile seminar --provider gpt-4o --pack ./materials --ocr-
 stt run long-seminar.wav --profile seminar --provider gpt-4o --chunk-audio --chunk-seconds 600 --output out/seminar
 ```
 
-`--chunk-audio`는 ffmpeg segment 기능으로 `audio_chunks/chunk_*.wav`를 만든 뒤 각 chunk를 전사하고, 타임스탬프를 chunk offset만큼 보정해 하나의 `transcript.md/json/srt`로 합칩니다. OpenAI 파일 업로드 제한에 걸릴 수 있는 긴 Zoom H1e WAV에는 이 옵션을 켜는 것이 안전합니다.
+`--chunk-audio`는 ffmpeg segment 기능으로 `audio_chunks/chunk_*.wav`를 만든 뒤 각 chunk를 전사하고, 타임스탬프를 chunk offset만큼 보정해 하나의 `transcript.md/json/srt`로 합칩니다. OpenAI 파일 업로드 제한에 걸릴 수 있는 긴 Zoom H1e WAV를 `gpt-4o`, `gpt-4o-mini`, `whisper-1`로 처리할 때 사용합니다.
+
+`diarize` provider에는 `--chunk-audio`를 사용하지 마십시오. 외부에서 나눈 각 chunk마다 화자 ID가 새로 매겨져 동일 화자가 서로 다른 사람으로 합쳐질 수 있으므로 CLI가 이 조합을 거부합니다. 회의 화자분리는 전체 파일을 전달하고 OpenAI의 `chunking_strategy=auto`를 사용합니다:
+
+```bash
+stt run meeting.wav --profile meeting --provider diarize --output out/meeting
+```
 
 PDF figure/table 추출 도구 실행:
 
@@ -194,19 +223,13 @@ stt transcribe sample.wav --profile seminar --provider gpt-4o --terms-file terms
 - `web_research_results.json` (`--web-research-query`)
 - `pdf_extraction_jobs.json`, `pdf_extract/` (`--extract-pdfs`)
 
-Whisper와 최신 OpenAI STT 후보 비교:
+OpenAI와 Gemini STT 후보 비교:
 
 ```bash
-stt bakeoff sample.wav --profile seminar --providers whisper-1,gpt-4o,gpt-4o-mini,mlx-whisper --output out/bakeoff
+stt bakeoff sample.wav --profile seminar --providers whisper-1,gpt-4o,gpt-4o-mini,gemini-audio --output out/bakeoff
 ```
 
-로컬 fallback만 실행:
-
-```bash
-stt transcribe sample.wav --profile seminar --provider mlx-whisper --output out/local
-```
-
-`mlx-whisper`는 기본 경로가 아니라 오프라인/비상 fallback입니다. 실행 환경에 `mlx_whisper` CLI가 설치되어 있어야 하며, 필요하면 `MLX_WHISPER_COMMAND`와 `MLX_WHISPER_MODEL`로 command/model을 바꿀 수 있습니다.
+Gemini를 포함한 비교에는 `GEMINI_API_KEY`가 필요하고, OpenAI 모델을 포함하면 `OPENAI_API_KEY`도 필요합니다. 같은 녹음과 Knowledge Pack으로 공급자별 `*.json`과 `bakeoff_report.md`를 생성합니다. 로컬 모델은 설치하지 않으며 모든 STT provider는 클라우드 API를 사용합니다.
 
 ## Knowledge Pack 원칙
 

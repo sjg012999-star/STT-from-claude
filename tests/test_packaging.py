@@ -8,6 +8,10 @@ class PackagingTest(unittest.TestCase):
         pyproject = tomllib.loads(Path("pyproject.toml").read_text(encoding="utf-8"))
 
         self.assertIn("openai>=1.0", pyproject["project"]["dependencies"])
+        self.assertIn(
+            "google-genai>=1.0",
+            pyproject["project"]["optional-dependencies"]["gemini"],
+        )
         self.assertEqual(
             pyproject["project"]["scripts"]["stt"],
             "stt_pipeline.cli:main",

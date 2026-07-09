@@ -1,12 +1,10 @@
 from pathlib import Path
 import os
-import shutil
 import subprocess
 import tempfile
 import unittest
 
 from stt_pipeline.knowledge_pack import PdfExtractionJob, SlideEvidence, build_knowledge_pack
-from stt_pipeline.local_whisper import MlxWhisperConfig, build_mlx_whisper_command
 from stt_pipeline.pdf_tools import FigureTableExtractorConfig, run_pdf_extraction_jobs
 from stt_pipeline.reference_lookup import (
     ReferenceLookupHttpClient,
@@ -16,16 +14,6 @@ from stt_pipeline.reference_lookup import (
 
 
 class OptionalIntegrationsTest(unittest.TestCase):
-    @unittest.skipUnless(shutil.which("mlx_whisper"), "mlx_whisper CLI is not installed")
-    def test_mlx_whisper_command_can_be_built_for_installed_cli(self):
-        command = build_mlx_whisper_command(
-            Path("sample.wav"),
-            Path("out/mlx"),
-            config=MlxWhisperConfig(command="mlx_whisper", model="mlx-community/whisper-large-v3-turbo"),
-        )
-
-        self.assertEqual(command[0], "mlx_whisper")
-
     @unittest.skipUnless(
         os.environ.get("STT_RUN_LIVE_REFERENCE_TESTS") == "1",
         "set STT_RUN_LIVE_REFERENCE_TESTS=1 to run live reference lookup",

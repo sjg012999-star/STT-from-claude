@@ -47,7 +47,7 @@ from stt_pipeline.review import (
     review_queue_to_dict,
 )
 from stt_pipeline.rich_summary import OpenAiRichSummarizer
-from stt_pipeline.stt_provider import RoutedSttTranscriber
+from stt_pipeline.stt_provider import RoutedSttTranscriber, default_provider_for_profile
 from stt_pipeline.summarize import build_basic_summary
 from stt_pipeline.transcript import TranscriptResult
 from stt_pipeline.vision_ocr import OpenAiSlideImageOcr
@@ -216,6 +216,11 @@ def _run_transcribe(
     web_research_client=None,
     command_runner=None,
 ) -> int:
+    _validate_external_chunking(
+        chunk_audio=getattr(args, "chunk_audio", False),
+        provider=args.provider,
+        profile=args.profile,
+    )
     output_dir = Path(args.output)
     output_dir.mkdir(parents=True, exist_ok=True)
     terms, pack = _load_prompt_terms(args, output_dir, image_ocr=image_ocr)
@@ -317,6 +322,14 @@ def _run_transcribe(
 
 
 def _run_bakeoff(args, transcriber, *, image_ocr=None, web_research_client=None, command_runner=None) -> int:
+    providers = tuple(value.strip() for value in args.providers.split(",") if value.strip())
+    for provider in providers:
+        _validate_external_chunking(
+            chunk_audio=getattr(args, "chunk_audio", False),
+            provider=provider,
+            profile=args.profile,
+        )
+
     output_dir = Path(args.output)
     output_dir.mkdir(parents=True, exist_ok=True)
     terms, pack = _load_prompt_terms(args, output_dir, image_ocr=image_ocr)
@@ -325,7 +338,6 @@ def _run_bakeoff(args, transcriber, *, image_ocr=None, web_research_client=None,
     _maybe_lookup_references(args, output_dir, pack, plans, None)
     _maybe_extract_pdfs(args, output_dir, pack, command_runner)
     audio_path, preprocess_manifest = _prepare_audio(args, output_dir, command_runner)
-    providers = tuple(value.strip() for value in args.providers.split(",") if value.strip())
     results = []
 
     for provider in providers:
@@ -350,6 +362,27 @@ def _run_bakeoff(args, transcriber, *, image_ocr=None, web_research_client=None,
         providers=providers,
     )
     return 0
+
+
+def _validate_external_chunking(
+    *,
+    chunk_audio: bool,
+    provider: str | None,
+    profile: str,
+) -> None:
+    selected_provider = provider or default_provider_for_profile(profile)
+    if chunk_audio and selected_provider == "diarize":
+        raise ValueError(
+            "--chunk-audio cannot be combined with the diarize provider because "
+            "speaker identities reset for each external chunk. Omit --chunk-audio "
+            "and let OpenAI use chunking_strategy=auto for the complete file."
+        )
+    if chunk_audio and selected_provider == "gemini-audio":
+        raise ValueError(
+            "--chunk-audio cannot be combined with gemini-audio because external "
+            "chunks lose whole-recording speaker and context continuity. Omit "
+            "--chunk-audio and upload the complete file through Gemini Files API."
+        )
 
 
 def _transcribe_audio(

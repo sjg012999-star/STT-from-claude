@@ -13,7 +13,7 @@
 | 질문 | 결론 |
 |---|---|
 | 용도별(학회/강연/회의)로 STT 모델을 따로 만들어야 하나? | **아니오. 하나의 통합 파이프라인 + 용도별 "프로필"로 충분** |
-| STT는 로컬 vs 클라우드? | **클라우드 API 기본** (M2 Air 팬리스 + 성능 우선 → 로컬 열세). 로컬(mlx-whisper)은 오프라인 폴백만 |
+| STT는 로컬 vs 클라우드? | **클라우드 API 전용** (M2 Air 8GB + 성능·운영 단순성 우선) |
 | STT 모델을 직접 학습/파인튜닝해야 하나? | **아니오.** 억양·용어 문제는 자료 기반 용어 주입 + LLM 후처리로 해결 |
 | 수정 내역은 어떻게 보여주나? | LLM이 구조화된 교정 목록(JSON)을 출력 + **diff 검증**으로 환각 방지 → 문서 끝에 표로 정리 |
 | 발표자료·강연자 정보 통합? | **Knowledge Pack 모듈**로 설계 — 용어 주입(Phase 1) + 조사·보강 노트(Phase 3) |
@@ -37,7 +37,7 @@
 | 비용 | 무료 (시간·발열 비용) | 시간당 ~$0.4 안팎 |
 | 프라이버시 | 유리 | 사용자 우선순위상 허용 (성능 > 보안) |
 
-**결정**: 클라우드 STT 기본. 후보(gpt-4o-transcribe / ElevenLabs Scribe / AssemblyAI, 한국어 비중 높으면 클로바 스피치 추가)를 **실제 세미나 녹음 1개로 직접 비교(bake-off)**하여 기본 API를 확정 — Phase 1 첫 작업. 로컬 mlx-whisper large-v3-turbo는 오프라인 폴백 옵션으로만 유지. LLM 교정·요약·비전 추출은 OpenAI API 기본으로 둡니다.
+**결정**: 클라우드 STT 전용. OpenAI와 Gemini 후보를 **실제 세미나 녹음 1개로 직접 비교(bake-off)**하여 기본 API를 확정합니다. 로컬 모델은 설치·운영하지 않으며, LLM 교정·요약·비전 추출은 OpenAI API 기본으로 둡니다.
 
 ---
 
@@ -231,14 +231,14 @@ stt-conference/
 │   ├── knowledge_pack.py     # 자료 단서 우선순위화 + 전사/슬라이드 정렬 + PDF 추출 작업 계획
 │   ├── llm_provider.py       # OpenAI-first LLM/vision 작업 계획
 │   ├── stt_provider.py       # OpenAI STT provider aliases + live adapter + normalized transcript output
-│   ├── local_whisper.py      # mlx-whisper command adapter (offline fallback)
+│   ├── gemini_audio.py       # Gemini Audio Understanding adapter + structured transcript normalization
 │   ├── transcript.py         # 공통 transcript/segment dataclass
 │   ├── slide_extract.py      # OCR 텍스트 → 슬라이드 근거 구조화
 │   ├── reference_lookup.py   # DOI/레퍼런스 검색 URL 계획
 │   ├── pdf_tools.py          # 기존 PDF Figure/Table 추출 스크립트 호출 계획
 │   ├── cli.py                # stt transcribe / stt bakeoff
 │   ├── preprocess.py         # ffmpeg 변환, 무음 트리밍
-│   ├── stt_providers/        # gpt4o / elevenlabs / assemblyai / mlx(폴백) 어댑터
+│   ├── stt_providers/        # 추가 클라우드 STT provider 어댑터 후보
 │   ├── bakeoff.py            # STT API 비교 스크립트 (Phase 1 첫 작업)
 │   ├── slide_ocr.py          # PPT/사진 OCR 및 figure/table crop 후보 추출
 │   ├── correct.py            # OpenAI 교정 + diff 검증
@@ -271,8 +271,7 @@ stt-conference/
 ## 7. 구현 로드맵
 
 ### Phase 1 — MVP (CLI, 학회 프로필)
-- [x] **STT adapter + bake-off CLI** — `gpt-4o`, `gpt-4o-mini`, `whisper-1`, `diarize`, `mlx-whisper` 후보를 같은 녹음으로 비교 가능
-- [x] 로컬 `mlx-whisper` fallback adapter (optional command, hard dependency 아님)
+- [x] **STT adapter + bake-off CLI** — `gpt-4o`, `gpt-4o-mini`, `whisper-1`, `diarize`, `gemini-audio` 후보를 같은 녹음으로 비교 가능
 - [x] `stt run seminar.wav --profile seminar --pack ./materials/` 기본 흐름 — 텍스트/PPTX/OCR JSON 자료에서 prompt terms 생성 후 transcript.md/transcript.json 출력
 - [x] 전처리 옵션 → 클라우드 STT → md/json/srt 출력
 - [x] 긴 녹음 업로드 제한 대응: ffmpeg chunking + 전사 병합 (`--chunk-audio`)
@@ -325,4 +324,4 @@ stt-conference/
 | 슬라이드 사진 품질 저하 | OpenAI vision-capable model로 1차 추출하되, 불확실 시 "판독 불가" 표기 |
 | 긴 녹음에서 청크 경계 문맥 단절 | 청크 간 500토큰 오버랩 + 직전 청크 요약 전달 |
 | 클라우드 STT 파일 크기 제한 | 무음 경계 기준 분할 업로드 (문장 중간 절단 방지) |
-| API 장애·오프라인 | mlx-whisper 로컬 폴백 유지 |
+| 한 provider의 API 장애 | OpenAI/Gemini provider 전환 + 명시적 재실행 |
