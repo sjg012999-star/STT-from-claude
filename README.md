@@ -18,7 +18,7 @@
 - [x] OCR 텍스트/레퍼런스 PDF 추출 어댑터 경계 → `src/stt_pipeline/slide_extract.py`, `src/stt_pipeline/pdf_tools.py`
 - [x] OpenAI STT adapter + provider bakeoff CLI → `src/stt_pipeline/stt_provider.py`, `src/stt_pipeline/cli.py`
 - [x] `stt run ... --pack ./materials` 기본 실행 흐름 → 텍스트/PPTX/OCR JSON 자료에서 STT prompt terms 생성
-- [x] 전처리 옵션, SRT 출력, OpenAI 교정 옵션, 기본 요약 출력
+- [x] 전처리 옵션, 긴 녹음 chunking 옵션, SRT 출력, OpenAI 교정 옵션, 기본 요약 출력
 - [x] OpenAI vision 기반 슬라이드 사진 OCR 옵션
 - [x] 레퍼런스 DOI/검색 URL 계획 출력 옵션
 - [x] 명시적 PDF figure/table 추출 실행 옵션
@@ -69,6 +69,14 @@ stt run sample.wav --profile seminar --provider gpt-4o --pack ./materials --outp
 stt run sample.wav --profile seminar --provider gpt-4o --pack ./materials --ocr-images --output out/seminar
 ```
 
+긴 녹음 파일 분할 전사:
+
+```bash
+stt run long-seminar.wav --profile seminar --provider gpt-4o --chunk-audio --chunk-seconds 600 --output out/seminar
+```
+
+`--chunk-audio`는 ffmpeg segment 기능으로 `audio_chunks/chunk_*.wav`를 만든 뒤 각 chunk를 전사하고, 타임스탬프를 chunk offset만큼 보정해 하나의 `transcript.md/json/srt`로 합칩니다. OpenAI 파일 업로드 제한에 걸릴 수 있는 긴 Zoom H1e WAV에는 이 옵션을 켜는 것이 안전합니다.
+
 PDF figure/table 추출 도구 실행:
 
 ```bash
@@ -88,7 +96,7 @@ stt run sample.wav --profile seminar --provider gpt-4o --pack ./materials --plan
 전처리, 교정, 요약까지 포함:
 
 ```bash
-stt run sample.wav --profile seminar --provider gpt-4o --pack ./materials --ocr-images --preprocess --correct --summarize --llm-summarize --plan-reference-search --enrich-notes --output out/seminar
+stt run sample.wav --profile seminar --provider gpt-4o --pack ./materials --ocr-images --preprocess --chunk-audio --correct --summarize --llm-summarize --plan-reference-search --enrich-notes --output out/seminar
 ```
 
 `--preprocess`는 `ffmpeg`로 16kHz mono/loudness-normalized WAV를 만든 뒤 STT에 넘깁니다. `--correct`는 OpenAI Responses API에 구조화된 교정 JSON을 요청하고, 실제 세그먼트에 존재하는 원문만 바꿉니다. `--summarize`는 전사/교정 결과를 분리한 기본 Markdown 요약을 만듭니다.
@@ -118,6 +126,7 @@ stt transcribe sample.wav --profile seminar --provider gpt-4o --terms-file terms
 - `rich_summary.md` (`--llm-summarize`)
 - `notes.md` (`--enrich-notes`)
 - `prompt_terms.txt`, `knowledge_pack.json`, `run_manifest.json`
+- `audio_chunks/chunk_*.wav` (`--chunk-audio`)
 - `reference_lookup_jobs.json` (`--plan-reference-search`)
 - `pdf_extraction_jobs.json`, `pdf_extract/` (`--extract-pdfs`)
 

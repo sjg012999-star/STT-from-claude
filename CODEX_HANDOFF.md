@@ -16,7 +16,7 @@ Do not force-push or overwrite the original Claude branch. If Claude resumes wor
 - Added a tested Phase 1 Knowledge Pack scaffold in `src/stt_pipeline/knowledge_pack.py`.
 - Added OpenAI STT adapter and CLI outputs for `transcript.md` / `transcript.json`.
 - Added material-pack prompt term extraction for text, Markdown, PPTX, and slide OCR JSON.
-- Added optional ffmpeg preprocessing, SRT output, OpenAI structured correction, and basic Markdown summary output.
+- Added optional ffmpeg preprocessing, audio chunking, SRT output, OpenAI structured correction, and basic Markdown summary output.
 - Added optional OpenAI vision OCR for slide photos via `--ocr-images`.
 - Added deterministic reference lookup planning via `--plan-reference-search`.
 - Added explicit PDF figure/table extraction command execution via `--extract-pdfs`.
@@ -40,6 +40,7 @@ Live OpenAI STT is wired behind `OpenAiSttTranscriber`, optional OpenAI transcri
 - `src/stt_pipeline/llm_provider.py`: OpenAI-first LLM request planning.
 - `src/stt_pipeline/stt_provider.py`: OpenAI STT request planning, live adapter, and normalized transcript output.
 - `src/stt_pipeline/transcript.py`: shared transcript result dataclasses.
+- `src/stt_pipeline/audio_chunks.py`: ffmpeg segment planning plus chunk transcript timestamp merging.
 - `src/stt_pipeline/materials.py`: material-pack loader for text, Markdown, PPTX, and slide OCR JSON prompt terms.
 - `src/stt_pipeline/preprocess.py`: deterministic ffmpeg preprocess command builder and runner.
 - `src/stt_pipeline/report.py`: SRT rendering from timestamped transcript segments.
@@ -53,6 +54,7 @@ Live OpenAI STT is wired behind `OpenAiSttTranscriber`, optional OpenAI transcri
 - `src/stt_pipeline/reference_lookup.py`: deterministic DOI/Crossref/OpenAlex lookup planning.
 - `src/stt_pipeline/pdf_tools.py`: command builder for the existing PDF figure/table extraction script.
 - `tests/test_knowledge_pack.py`: tests for prioritization, PDF extraction jobs, and transcript-slide alignment.
+- `tests/test_audio_chunks.py`: tests for ffmpeg chunk planning and merged transcript offsets.
 - `tests/test_slide_extract.py`: tests for OCR text classification into slide evidence.
 - `tests/test_reference_lookup.py`: tests for DOI extraction and reference lookup planning.
 - `tests/test_pdf_tools.py`: tests for PDF extraction command planning.
@@ -72,6 +74,7 @@ The STT adapter already supports `gpt-4o`, `gpt-4o-mini`, `whisper-1`, and `diar
 `stt run ... --pack ./materials` now merges `--terms-file` with prompt terms extracted from `.txt`, `.md`, `.pptx`, slide OCR `.json`, and slide photos when `--ocr-images` is passed. PDFs are not mixed into prompt terms; they are tracked as `pdf_sources` and can be processed with `--extract-pdfs --pdf-extractor-script ...`.
 Use `--plan-reference-search` to write `reference_lookup_jobs.json` with DOI, Crossref, OpenAlex, and DOI URL candidates. This does not perform network lookup or download yet.
 Use `--preprocess` to run ffmpeg before STT. Use `--correct` only when `OPENAI_MODEL` is set; it asks for structured correction JSON and applies only exact declared replacements. Use `--summarize` for the basic Markdown summary.
+Use `--chunk-audio --chunk-seconds 600` for long recordings that may exceed STT file upload limits. Chunking runs after preprocessing, writes `audio_chunks/chunk_*.wav`, transcribes each chunk, and offsets timestamps before writing the combined transcript.
 Use `--correction-chunk-size` and `--correction-overlap` for long recordings; chunk provenance is written to `corrections.json` and `run_manifest.json`.
 `--summarize` currently uses deterministic profile templates, not an LLM summarizer.
 `--llm-summarize` uses `OPENAI_MODEL` through `OpenAiRichSummarizer` and writes `rich_summary.md`. It requires every generated item to carry one of the allowed source labels: `speaker_transcript`, `slide_text`, `reference_pdf`, or `additional_research`.

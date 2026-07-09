@@ -273,6 +273,7 @@ stt-conference/
 - [x] **STT adapter + bake-off CLI** — `gpt-4o`, `gpt-4o-mini`, `whisper-1`, `diarize` 후보를 같은 녹음으로 비교 가능
 - [x] `stt run seminar.wav --profile seminar --pack ./materials/` 기본 흐름 — 텍스트/PPTX/OCR JSON 자료에서 prompt terms 생성 후 transcript.md/transcript.json 출력
 - [x] 전처리 옵션 → 클라우드 STT → md/json/srt 출력
+- [x] 긴 녹음 업로드 제한 대응: ffmpeg chunking + 전사 병합 (`--chunk-audio`)
 - [x] Knowledge Pack **기본**: 텍스트/PPTX/OCR JSON 자료 → 용어 주입 (`--terms-file`과 병합)
 - [x] Knowledge Pack 확장 1차: 원본 슬라이드 사진 OCR 옵션 (`--ocr-images`)
 - [x] Knowledge Pack 확장 2차: 레퍼런스 DOI/검색 URL 계획 출력 (`--plan-reference-search`)

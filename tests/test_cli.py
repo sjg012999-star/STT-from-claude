@@ -282,6 +282,50 @@ class CliTest(unittest.TestCase):
         self.assertTrue(manifest["preprocess"]["enabled"])
         self.assertIn("00:00:00,000 --> 00:00:03,000", srt)
 
+    def test_run_can_chunk_long_audio_before_transcription(self):
+        transcriber = FakeTranscriber()
+        runner_calls = []
+
+        def runner(command):
+            runner_calls.append(command)
+            chunk_dir = Path(command[-1]).parent
+            chunk_dir.mkdir(parents=True, exist_ok=True)
+            (chunk_dir / "chunk_000.wav").write_bytes(b"chunk 0")
+            (chunk_dir / "chunk_001.wav").write_bytes(b"chunk 1")
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            audio_path = root / "long.wav"
+            output_dir = root / "out"
+            audio_path.write_bytes(b"long audio")
+
+            exit_code = main(
+                [
+                    "run",
+                    str(audio_path),
+                    "--profile",
+                    "seminar",
+                    "--provider",
+                    "gpt-4o",
+                    "--chunk-audio",
+                    "--chunk-seconds",
+                    "600",
+                    "--output",
+                    str(output_dir),
+                ],
+                transcriber=transcriber,
+                command_runner=runner,
+            )
+
+            manifest = json.loads((output_dir / "run_manifest.json").read_text(encoding="utf-8"))
+            srt = (output_dir / "transcript.srt").read_text(encoding="utf-8")
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual([call["audio_path"].name for call in transcriber.calls], ["chunk_000.wav", "chunk_001.wav"])
+        self.assertIn("00:10:00,000 --> 00:10:03,000", srt)
+        self.assertTrue(manifest["chunking"]["enabled"])
+        self.assertEqual(manifest["chunking"]["chunk_count"], 2)
+
     def test_run_can_write_corrected_transcript_and_summary(self):
         transcriber = FakeTranscriber()
         corrector = FakeCorrector()

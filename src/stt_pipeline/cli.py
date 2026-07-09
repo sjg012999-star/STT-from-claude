@@ -6,6 +6,7 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Iterable, Sequence
 
+from stt_pipeline.audio_chunks import chunk_audio, merge_chunk_transcripts
 from stt_pipeline.correct import (
     OpenAiTranscriptCorrector,
     CorrectionReport,
@@ -80,6 +81,8 @@ def _build_parser() -> argparse.ArgumentParser:
     transcribe.add_argument("--pdf-extractor-script")
     transcribe.add_argument("--pdf-page-render", action="store_true")
     transcribe.add_argument("--preprocess", action="store_true")
+    transcribe.add_argument("--chunk-audio", action="store_true")
+    transcribe.add_argument("--chunk-seconds", type=int, default=600)
     transcribe.add_argument("--correct", action="store_true")
     transcribe.add_argument("--correction-chunk-size", type=int)
     transcribe.add_argument("--correction-overlap", type=int, default=1)
@@ -100,6 +103,8 @@ def _build_parser() -> argparse.ArgumentParser:
     run.add_argument("--pdf-extractor-script")
     run.add_argument("--pdf-page-render", action="store_true")
     run.add_argument("--preprocess", action="store_true")
+    run.add_argument("--chunk-audio", action="store_true")
+    run.add_argument("--chunk-seconds", type=int, default=600)
     run.add_argument("--correct", action="store_true")
     run.add_argument("--correction-chunk-size", type=int)
     run.add_argument("--correction-overlap", type=int, default=1)
@@ -120,6 +125,8 @@ def _build_parser() -> argparse.ArgumentParser:
     bakeoff.add_argument("--pdf-extractor-script")
     bakeoff.add_argument("--pdf-page-render", action="store_true")
     bakeoff.add_argument("--preprocess", action="store_true")
+    bakeoff.add_argument("--chunk-audio", action="store_true")
+    bakeoff.add_argument("--chunk-seconds", type=int, default=600)
     bakeoff.add_argument("--output", required=True)
 
     return parser
@@ -140,11 +147,14 @@ def _run_transcribe(
     reference_lookup_plans = _maybe_plan_reference_search(args, output_dir, pack)
     pdf_results = _maybe_extract_pdfs(args, output_dir, pack, command_runner)
     audio_path, preprocess_manifest = _prepare_audio(args, output_dir, command_runner)
-    result = transcriber.transcribe(
+    result, chunk_manifest = _transcribe_audio(
+        args,
+        transcriber,
         audio_path,
+        terms,
+        output_dir=output_dir,
+        command_runner=command_runner,
         provider=args.provider,
-        profile=args.profile,
-        prompt_terms=terms,
     )
 
     _write_result_json(output_dir / "transcript.json", result)
@@ -186,6 +196,7 @@ def _run_transcribe(
         input_audio=args.audio_path,
         stt_audio=audio_path,
         preprocess_manifest=preprocess_manifest,
+        chunk_manifest=chunk_manifest,
         result=result,
         corrected=correction_report is not None,
         summarized=getattr(args, "summarize", False),
@@ -207,11 +218,14 @@ def _run_bakeoff(args, transcriber, *, image_ocr=None, command_runner=None) -> i
     results = []
 
     for provider in providers:
-        result = transcriber.transcribe(
+        result, _chunk_manifest = _transcribe_audio(
+            args,
+            transcriber,
             audio_path,
+            terms,
+            output_dir=output_dir,
+            command_runner=command_runner,
             provider=provider,
-            profile=args.profile,
-            prompt_terms=terms,
         )
         _write_result_json(output_dir / f"{provider}.json", result)
         results.append(result)
@@ -225,6 +239,57 @@ def _run_bakeoff(args, transcriber, *, image_ocr=None, command_runner=None) -> i
         providers=providers,
     )
     return 0
+
+
+def _transcribe_audio(
+    args,
+    transcriber,
+    audio_path: Path,
+    terms: tuple[str, ...],
+    *,
+    output_dir: Path,
+    command_runner,
+    provider: str | None,
+):
+    if not getattr(args, "chunk_audio", False):
+        return (
+            transcriber.transcribe(
+                audio_path,
+                provider=provider,
+                profile=args.profile,
+                prompt_terms=terms,
+            ),
+            {"enabled": False},
+        )
+
+    chunk_seconds = max(1, int(getattr(args, "chunk_seconds", 600)))
+    runner = command_runner or _run_command
+    chunk_paths = chunk_audio(
+        audio_path,
+        output_dir,
+        chunk_seconds=chunk_seconds,
+        runner=runner,
+    )
+    if not chunk_paths:
+        raise ValueError("audio chunking did not produce any chunk_*.wav files")
+    chunk_results = tuple(
+        transcriber.transcribe(
+            chunk_path,
+            provider=provider,
+            profile=args.profile,
+            prompt_terms=terms,
+        )
+        for chunk_path in chunk_paths
+    )
+    return (
+        merge_chunk_transcripts(chunk_results, chunk_seconds=chunk_seconds),
+        {
+            "enabled": True,
+            "chunk_seconds": chunk_seconds,
+            "chunk_count": len(chunk_paths),
+            "chunks": [str(path) for path in chunk_paths],
+        },
+    )
 
 
 def _prepare_audio(args, output_dir: Path, command_runner) -> tuple[Path, dict[str, object]]:
@@ -430,6 +495,7 @@ def _write_run_manifest(
     input_audio: str,
     stt_audio: Path,
     preprocess_manifest: dict[str, object],
+    chunk_manifest: dict[str, object],
     result: TranscriptResult,
     corrected: bool,
     summarized: bool,
@@ -443,6 +509,7 @@ def _write_run_manifest(
                 "input_audio": input_audio,
                 "stt_audio": str(stt_audio),
                 "preprocess": preprocess_manifest,
+                "chunking": chunk_manifest,
                 "provider": result.provider,
                 "model": result.model,
                 "profile": result.profile,
