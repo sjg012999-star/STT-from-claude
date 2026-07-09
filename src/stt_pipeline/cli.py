@@ -38,6 +38,12 @@ from stt_pipeline.reference_lookup import (
     reference_lookup_plans_to_dict,
     reference_lookup_results_to_dict,
 )
+from stt_pipeline.review import (
+    build_review_queue,
+    filter_report_to_accepted_glossary_corrections,
+    load_review_decisions,
+    review_queue_to_dict,
+)
 from stt_pipeline.rich_summary import OpenAiRichSummarizer
 from stt_pipeline.stt_provider import RoutedSttTranscriber
 from stt_pipeline.summarize import build_basic_summary
@@ -102,6 +108,8 @@ def _build_parser() -> argparse.ArgumentParser:
     transcribe.add_argument("--chunk-seconds", type=int, default=600)
     transcribe.add_argument("--correct", action="store_true")
     transcribe.add_argument("--save-glossary")
+    transcribe.add_argument("--write-review-queue", action="store_true")
+    transcribe.add_argument("--review-decisions-file")
     transcribe.add_argument("--correction-chunk-size", type=int)
     transcribe.add_argument("--correction-overlap", type=int, default=1)
     transcribe.add_argument("--summarize", action="store_true")
@@ -127,6 +135,8 @@ def _build_parser() -> argparse.ArgumentParser:
     run.add_argument("--chunk-seconds", type=int, default=600)
     run.add_argument("--correct", action="store_true")
     run.add_argument("--save-glossary")
+    run.add_argument("--write-review-queue", action="store_true")
+    run.add_argument("--review-decisions-file")
     run.add_argument("--correction-chunk-size", type=int)
     run.add_argument("--correction-overlap", type=int, default=1)
     run.add_argument("--summarize", action="store_true")
@@ -205,6 +215,12 @@ def _run_transcribe(
         terms,
         corrector=corrector,
     )
+    review_queue_manifest = _maybe_write_review_queue(
+        args,
+        output_dir,
+        correction_report=correction_report,
+        reference_lookup_results=reference_lookup_results,
+    )
     glossary_manifest = _maybe_save_glossary(args, correction_report)
     summary_source = (
         correction_report.corrected_result if correction_report is not None else result
@@ -247,6 +263,7 @@ def _run_transcribe(
         reference_lookup_planned=getattr(args, "plan_reference_search", False),
         references_looked_up=getattr(args, "lookup_references", False),
         additional_research_manifest=_additional_research_manifest(additional_research_items),
+        review_queue_manifest=review_queue_manifest,
         glossary_manifest=glossary_manifest,
         correction_manifest=_correction_manifest(args),
     )
@@ -559,16 +576,51 @@ def _maybe_save_glossary(args, correction_report: CorrectionReport | None) -> di
         return {"enabled": False}
     if correction_report is None:
         raise ValueError("--save-glossary requires --correct")
+    decisions_path = getattr(args, "review_decisions_file", None)
+    active_report = correction_report
+    if decisions_path:
+        active_report = filter_report_to_accepted_glossary_corrections(
+            correction_report,
+            load_review_decisions(decisions_path),
+        )
     glossary_path = Path(path)
     existing = load_glossary_tsv(glossary_path)
-    new_entries = build_glossary_entries_from_corrections(correction_report)
+    new_entries = build_glossary_entries_from_corrections(active_report)
     merged = merge_glossary_entries(existing, new_entries)
     write_glossary_tsv(glossary_path, merged)
-    return {
+    manifest = {
         "enabled": True,
         "saved_to": str(glossary_path),
         "new_entries": len(new_entries),
         "total_entries": len(merged),
+    }
+    if decisions_path:
+        manifest["review_decisions_file"] = str(decisions_path)
+    return manifest
+
+
+def _maybe_write_review_queue(
+    args,
+    output_dir: Path,
+    *,
+    correction_report: CorrectionReport | None,
+    reference_lookup_results,
+) -> dict[str, object]:
+    if not getattr(args, "write_review_queue", False):
+        return {"enabled": False}
+    items = build_review_queue(
+        correction_report=correction_report,
+        reference_lookup_results=tuple(reference_lookup_results),
+    )
+    path = output_dir / "review_queue.json"
+    path.write_text(
+        json.dumps(review_queue_to_dict(items), ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    return {
+        "enabled": True,
+        "path": str(path),
+        "item_count": len(items),
     }
 
 
@@ -643,6 +695,7 @@ def _write_run_manifest(
     reference_lookup_planned: bool,
     references_looked_up: bool,
     additional_research_manifest: dict[str, object],
+    review_queue_manifest: dict[str, object],
     glossary_manifest: dict[str, object],
     correction_manifest: dict[str, object],
 ) -> None:
@@ -662,6 +715,7 @@ def _write_run_manifest(
                 "reference_lookup_planned": reference_lookup_planned,
                 "references_looked_up": references_looked_up,
                 "additional_research": additional_research_manifest,
+                "review_queue": review_queue_manifest,
                 "glossary": glossary_manifest,
                 "correction": correction_manifest,
             },

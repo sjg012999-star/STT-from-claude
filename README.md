@@ -29,6 +29,7 @@
 - [x] source label 기반 `notes.md` 보강 노트 출력
 - [x] OpenAI LLM 기반 source-labeled `rich_summary.md` 출력 옵션
 - [x] 명시적 추가 조사 파일(`--additional-research-file`)을 source-labeled evidence로 반영
+- [x] glossary 후보와 낮은 품질 reference metadata를 위한 `review_queue.json` 검수 경로
 - [x] Phase 1: MVP (CLI, 학회 프로필)
 - [ ] Phase 2: 회의/강연 프로필, 용어집 자동 누적
 - [ ] Phase 3: 웹 UI, 검수 도구
@@ -139,6 +140,18 @@ stt run sample.wav --profile seminar --provider gpt-4o --correct --save-glossary
 
 저장된 `glossary.tsv`는 그대로 `--terms-file ./glossary.tsv`로 다시 넣을 수 있습니다. 이때 STT prompt에는 `corrected` 컬럼의 용어만 들어갑니다.
 
+검수 큐 생성:
+
+```bash
+stt run sample.wav --profile seminar --provider gpt-4o --correct --lookup-references --write-review-queue --output out/seminar
+```
+
+`--write-review-queue`는 적용된 교정쌍을 glossary 후보로, `metadata_quality_score`가 낮거나 `review_flags`가 있는 레퍼런스를 reference metadata 검수 항목으로 `review_queue.json`에 남깁니다. 사람이 각 항목의 `status`를 `accepted` 또는 `rejected`로 바꾼 뒤, accepted glossary 후보만 저장할 수 있습니다.
+
+```bash
+stt run sample.wav --profile seminar --provider gpt-4o --correct --save-glossary ./glossary.tsv --review-decisions-file out/seminar/review_queue.json --output out/seminar-reviewed
+```
+
 직접 만든 용어 힌트 파일만 추가:
 
 ```bash
@@ -151,6 +164,7 @@ stt transcribe sample.wav --profile seminar --provider gpt-4o --terms-file terms
 - `corrected_transcript.md` / `corrected_transcript.json` / `corrected_transcript.srt` (`--correct`)
 - `corrections.json` (`--correct`)
 - `glossary.tsv` 또는 지정 경로 (`--save-glossary`)
+- `review_queue.json` (`--write-review-queue`)
 - `summary.md` (`--summarize`)
 - `rich_summary.md` (`--llm-summarize`)
 - `notes.md` (`--enrich-notes`)

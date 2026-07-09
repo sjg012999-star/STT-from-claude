@@ -5,6 +5,7 @@ import unittest
 
 from stt_pipeline.cli import main
 from stt_pipeline.correct import Correction, CorrectionReport
+from stt_pipeline.review import build_review_queue, review_queue_to_dict
 from stt_pipeline.transcript import TranscriptResult, TranscriptSegment
 
 
@@ -458,6 +459,89 @@ class CliTest(unittest.TestCase):
         self.assertEqual(exit_code, 0)
         self.assertIn("Transcript\tCorrected transcript", glossary)
         self.assertEqual(manifest["glossary"]["saved_to"], str(glossary_path))
+
+    def test_run_can_write_review_queue_for_human_acceptance(self):
+        transcriber = FakeTranscriber()
+        corrector = FakeCorrector()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            audio_path = root / "sample.wav"
+            output_dir = root / "out"
+            audio_path.write_bytes(b"fake audio")
+
+            exit_code = main(
+                [
+                    "run",
+                    str(audio_path),
+                    "--profile",
+                    "seminar",
+                    "--provider",
+                    "gpt-4o",
+                    "--correct",
+                    "--write-review-queue",
+                    "--output",
+                    str(output_dir),
+                ],
+                transcriber=transcriber,
+                corrector=corrector,
+            )
+
+            review_queue = json.loads((output_dir / "review_queue.json").read_text(encoding="utf-8"))
+            manifest = json.loads((output_dir / "run_manifest.json").read_text(encoding="utf-8"))
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(review_queue["items"][0]["kind"], "glossary_candidate")
+        self.assertEqual(review_queue["items"][0]["status"], "pending")
+        self.assertTrue(manifest["review_queue"]["enabled"])
+
+    def test_run_can_save_glossary_from_accepted_review_decisions_only(self):
+        transcriber = FakeTranscriber()
+        corrector = FakeCorrector()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            audio_path = root / "sample.wav"
+            output_dir = root / "out"
+            glossary_path = root / "glossary.tsv"
+            decisions_path = root / "review_decisions.json"
+            audio_path.write_bytes(b"fake audio")
+            correction_report = corrector.correct(
+                transcriber.transcribe(audio_path, provider="gpt-4o", profile="seminar")
+            )
+            queue = tuple(
+                item.with_status("accepted")
+                for item in build_review_queue(correction_report=correction_report)
+            )
+            decisions_path.write_text(
+                json.dumps(review_queue_to_dict(queue), ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
+
+            exit_code = main(
+                [
+                    "run",
+                    str(audio_path),
+                    "--profile",
+                    "seminar",
+                    "--provider",
+                    "gpt-4o",
+                    "--correct",
+                    "--save-glossary",
+                    str(glossary_path),
+                    "--review-decisions-file",
+                    str(decisions_path),
+                    "--output",
+                    str(output_dir),
+                ],
+                transcriber=transcriber,
+                corrector=corrector,
+            )
+
+            glossary = glossary_path.read_text(encoding="utf-8")
+            manifest = json.loads((output_dir / "run_manifest.json").read_text(encoding="utf-8"))
+
+        self.assertEqual(exit_code, 0)
+        self.assertIn("Transcript\tCorrected transcript", glossary)
+        self.assertEqual(manifest["glossary"]["review_decisions_file"], str(decisions_path))
 
     def test_run_can_configure_correction_chunking(self):
         transcriber = FakeTranscriber()

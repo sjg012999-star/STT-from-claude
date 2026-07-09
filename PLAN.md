@@ -298,7 +298,9 @@ stt-conference/
 ### Phase 3 — Knowledge Pack 심화 + 편의성
 - [x] 레퍼런스 논문 조회 고도화 1차 (Crossref/OpenAlex/Semantic Scholar fallback, publisher별 PDF fallback, metadata 품질 flag)
 - [x] 명시적 추가 조사 파일 입력 (`--additional-research-file`, source-labeled evidence)
-- [ ] 레퍼런스 논문 조회 고도화 2차 (live broad web search adapter, publisher fallback 확대, 사람 검수 UX)
+- [x] 검수 큐 1차 (`review_queue.json`, glossary 후보 accepted 저장, low-quality metadata flag)
+- [x] optional integration smoke checks (live reference/publisher fallback, PDF extractor script)
+- [ ] 레퍼런스 논문 조회 고도화 2차 (live broad web search adapter, publisher fallback 확대)
 - [ ] 슬라이드-전사 정렬 + 통합 보강 노트 (출처 라벨 강제)
 - [ ] Gradio 웹 UI: 파일·자료 드롭, 교정/보강 승인·거부 버튼
 - [ ] 저신뢰 구간 오디오 클립 링크 (클릭 재생 검수)

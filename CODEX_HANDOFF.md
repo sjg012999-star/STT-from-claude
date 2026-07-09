@@ -29,9 +29,11 @@ Do not force-push or overwrite the original Claude branch. If Claude resumes wor
 - Added OpenAI LLM source-labeled rich summary output via `--llm-summarize`.
 - Added Semantic Scholar fallback, publisher-specific PDF fallback, metadata quality scores, and review flags to reference lookup results.
 - Added explicit additional research file input via `--additional-research-file`; loaded research notes are kept separate from STT prompt terms and passed only to source-labeled notes/rich summaries.
+- Added human review queue support via `--write-review-queue`; accepted glossary candidates can be applied with `--review-decisions-file`.
+- Added skipped-by-default optional integration checks for live reference/publisher fallback and configured PDF extractor scripts.
 - Updated README and PLAN to reflect reference-first, deck-level slide analysis and transcript/slide mutual support.
 
-Live OpenAI STT is wired behind `OpenAiSttTranscriber`, local `mlx-whisper` is routed only when `--provider mlx-whisper` is selected, optional OpenAI transcript correction is wired behind `OpenAiTranscriptCorrector`, optional slide-photo OCR is wired behind `OpenAiSlideImageOcr`, reference lookup planning is deterministic behind `--plan-reference-search`, live Crossref/OpenAlex/Semantic Scholar lookup plus publisher PDF fallback/open PDF caching is behind `--lookup-references`, optional PDF figure/table extraction execution is wired behind explicit CLI flags, deterministic source-separated notes are wired behind `--enrich-notes`, explicit external research files are wired behind `--additional-research-file`, and OpenAI source-labeled rich summaries are wired behind `--llm-summarize`. Tests still use fakes and do not call paid or network APIs. Live broad web search is not wired yet.
+Live OpenAI STT is wired behind `OpenAiSttTranscriber`, local `mlx-whisper` is routed only when `--provider mlx-whisper` is selected, optional OpenAI transcript correction is wired behind `OpenAiTranscriptCorrector`, optional slide-photo OCR is wired behind `OpenAiSlideImageOcr`, reference lookup planning is deterministic behind `--plan-reference-search`, live Crossref/OpenAlex/Semantic Scholar lookup plus publisher PDF fallback/open PDF caching is behind `--lookup-references`, optional PDF figure/table extraction execution is wired behind explicit CLI flags, deterministic source-separated notes are wired behind `--enrich-notes`, explicit external research files are wired behind `--additional-research-file`, review queues are wired behind `--write-review-queue`, accepted glossary decisions are wired through `--review-decisions-file`, and OpenAI source-labeled rich summaries are wired behind `--llm-summarize`. Tests still use fakes and do not call paid or network APIs. Live broad web search is not wired yet.
 
 ## Current Repo Contents
 
@@ -53,6 +55,7 @@ Live OpenAI STT is wired behind `OpenAiSttTranscriber`, local `mlx-whisper` is r
 - `src/stt_pipeline/report.py`: SRT rendering from timestamped transcript segments.
 - `src/stt_pipeline/correct.py`: OpenAI structured correction adapter plus exact-change validation.
 - `src/stt_pipeline/glossary.py`: TSV glossary accumulation from applied corrections.
+- `src/stt_pipeline/review.py`: human review queue builder for glossary candidates and low-confidence reference metadata.
 - `src/stt_pipeline/summarize.py`: basic source-separated Markdown summary generation.
 - `src/stt_pipeline/rich_summary.py`: OpenAI structured rich summary adapter with source-label validation.
 - `src/stt_pipeline/notes.py`: deterministic source-separated enriched notes generation.
@@ -68,16 +71,17 @@ Live OpenAI STT is wired behind `OpenAiSttTranscriber`, local `mlx-whisper` is r
 - `tests/test_slide_extract.py`: tests for OCR text classification into slide evidence.
 - `tests/test_reference_lookup.py`: tests for DOI extraction, reference lookup planning, fake Crossref/OpenAlex/Semantic Scholar metadata, publisher fallback, review flags, and PDF cache.
 - `tests/test_pdf_tools.py`: tests for PDF extraction command planning.
+- `tests/test_review.py`: tests for review queue generation and accepted glossary decision filtering.
 - `tests/test_rich_summary.py`: tests for structured rich summary rendering and source-label rejection.
 - `tests/test_glossary.py`: tests for correction-pair glossary build/merge/read/write.
-- `tests/test_optional_integrations.py`: skipped-by-default checks for optional `mlx_whisper` and live reference lookup.
+- `tests/test_optional_integrations.py`: skipped-by-default checks for optional `mlx_whisper`, live reference/publisher lookup, and configured PDF extractor scripts.
 - `docs/tooling.md`: GitHub/tooling candidates and integration rules.
 
 ## Next Implementation Order
 
-1. Add skipped integration checks for publisher PDF fallback and PDF extraction scripts before broadening defaults.
-2. Add a human review/acceptance path for glossary candidates and low-confidence reference metadata.
-3. Add a live broad web/reference search adapter only behind an explicit flag or external tool handoff; do not make it part of default STT.
+1. Add a live broad web/reference search adapter only behind an explicit flag or external tool handoff; do not make it part of default STT.
+2. Add a fuller review UI/UX path for approving/rejecting `review_queue.json` items, likely in the future Gradio app.
+3. Expand publisher fallback coverage only after optional integration samples prove value.
 
 Keep real cloud STT and OpenAI API calls behind adapters. Tests should use fakes and local fixtures, not paid network calls.
 OpenAI text model names must come from `OPENAI_MODEL`; use `OPENAI_VISION_MODEL` only when a distinct vision model is needed. Do not hardcode another provider model into the pipeline.
@@ -90,6 +94,7 @@ Use `--preprocess` to run ffmpeg before STT. Use `--correct` only when `OPENAI_M
 Use `--chunk-audio --chunk-seconds 600` for long recordings that may exceed STT file upload limits. Chunking runs after preprocessing, writes `audio_chunks/chunk_*.wav`, transcribes each chunk, and offsets timestamps before writing the combined transcript.
 Use `--correction-chunk-size` and `--correction-overlap` for long recordings; chunk provenance is written to `corrections.json` and `run_manifest.json`.
 Use `--save-glossary ./glossary.tsv` with `--correct` to accumulate applied correction pairs. The saved TSV can be passed back as `--terms-file`; only the `corrected` column is used as prompt terms.
+Use `--write-review-queue` to write `review_queue.json` containing glossary candidates and reference metadata that needs human review. If a reviewed queue has `status: accepted` for glossary candidates, pass it back with `--review-decisions-file` alongside `--save-glossary` to save only accepted candidates.
 `--summarize` currently uses deterministic profile templates, not an LLM summarizer.
 `--llm-summarize` uses `OPENAI_MODEL` through `OpenAiRichSummarizer` and writes `rich_summary.md`. It requires every generated item to carry one of the allowed source labels: `speaker_transcript`, `slide_text`, `reference_pdf`, or `additional_research`.
 `--additional-research-file` can be passed multiple times with `.md`, `.txt`, or `.json` research notes. It writes `additional_research.json` and passes those items to `notes.md` and `rich_summary.md` as `additional_research`; it does not affect STT prompt terms.
