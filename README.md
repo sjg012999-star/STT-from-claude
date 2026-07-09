@@ -29,6 +29,7 @@
 - [x] source label 기반 `notes.md` 보강 노트 출력
 - [x] OpenAI LLM 기반 source-labeled `rich_summary.md` 출력 옵션
 - [x] 명시적 추가 조사 파일(`--additional-research-file`)을 source-labeled evidence로 반영
+- [x] 명시적 web/reference search endpoint adapter (`--web-research-query`, 기본 비활성)
 - [x] glossary 후보와 낮은 품질 reference metadata를 위한 `review_queue.json` 검수 경로
 - [x] Phase 1: MVP (CLI, 학회 프로필)
 - [ ] Phase 2: 회의/강연 프로필, 용어집 자동 누적
@@ -114,6 +115,14 @@ stt run sample.wav --profile seminar --provider gpt-4o --pack ./materials --addi
 
 `--additional-research-file`은 직접 조사한 웹 검색 결과, 논문 후보, 강연자 정보, 검증 메모를 `.md`, `.txt`, `.json` 파일로 넣는 명시적 입력입니다. pipeline이 자체적으로 broad web search를 기본 실행하지는 않습니다. 입력 파일은 `additional_research.json`에 보존되고, `notes.md`와 `rich_summary.md`의 `additional_research` 근거로만 사용됩니다.
 
+명시적 web/reference search endpoint 사용:
+
+```bash
+stt run sample.wav --profile seminar --provider gpt-4o --pack ./materials --web-research-query "InTesTiny RGD nanoparticle" --web-research-endpoint "https://your-search-endpoint.example/api" --enrich-notes --llm-summarize --output out/seminar
+```
+
+`--web-research-query`는 `--web-research-endpoint`가 함께 있을 때만 실행됩니다. endpoint는 `items`, `results`, `organic`, 또는 Bing-style `webPages.value` JSON 배열을 반환하는 검색 API/사내 도구/로컬 프록시를 가정합니다. 결과는 `web_research_results.json`에 저장되고 `additional_research.json`에도 합쳐집니다.
+
 전처리, 교정, 요약까지 포함:
 
 ```bash
@@ -173,6 +182,7 @@ stt transcribe sample.wav --profile seminar --provider gpt-4o --terms-file terms
 - `reference_lookup_jobs.json` (`--plan-reference-search`)
 - `reference_lookup_results.json`, `reference_cache/*.pdf` (`--lookup-references`)
 - `additional_research.json` (`--additional-research-file`)
+- `web_research_results.json` (`--web-research-query`)
 - `pdf_extraction_jobs.json`, `pdf_extract/` (`--extract-pdfs`)
 
 Whisper와 최신 OpenAI STT 후보 비교:

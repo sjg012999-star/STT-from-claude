@@ -49,6 +49,12 @@ from stt_pipeline.stt_provider import RoutedSttTranscriber
 from stt_pipeline.summarize import build_basic_summary
 from stt_pipeline.transcript import TranscriptResult
 from stt_pipeline.vision_ocr import OpenAiSlideImageOcr
+from stt_pipeline.web_research import (
+    WebResearchConfig,
+    WebResearchHttpClient,
+    search_web_research,
+    web_research_to_dict,
+)
 
 
 def main(
@@ -59,6 +65,7 @@ def main(
     image_ocr=None,
     summarizer=None,
     reference_lookup_client=None,
+    web_research_client=None,
     command_runner=None,
 ) -> int:
     parser = _build_parser()
@@ -73,6 +80,7 @@ def main(
             image_ocr=image_ocr,
             summarizer=summarizer,
             reference_lookup_client=reference_lookup_client,
+            web_research_client=web_research_client,
             command_runner=command_runner,
         )
     if args.command == "bakeoff":
@@ -80,6 +88,7 @@ def main(
             args,
             active_transcriber,
             image_ocr=image_ocr,
+            web_research_client=web_research_client,
             command_runner=command_runner,
         )
     parser.error("unknown command")
@@ -97,6 +106,9 @@ def _build_parser() -> argparse.ArgumentParser:
     transcribe.add_argument("--terms-file")
     transcribe.add_argument("--pack", "--materials", action="append", dest="pack_paths")
     transcribe.add_argument("--additional-research-file", action="append", dest="additional_research_files")
+    transcribe.add_argument("--web-research-query", action="append", dest="web_research_queries")
+    transcribe.add_argument("--web-research-endpoint")
+    transcribe.add_argument("--web-research-limit", type=int, default=5)
     transcribe.add_argument("--ocr-images", action="store_true")
     transcribe.add_argument("--extract-pdfs", action="store_true")
     transcribe.add_argument("--plan-reference-search", action="store_true")
@@ -124,6 +136,9 @@ def _build_parser() -> argparse.ArgumentParser:
     run.add_argument("--terms-file")
     run.add_argument("--pack", "--materials", action="append", dest="pack_paths")
     run.add_argument("--additional-research-file", action="append", dest="additional_research_files")
+    run.add_argument("--web-research-query", action="append", dest="web_research_queries")
+    run.add_argument("--web-research-endpoint")
+    run.add_argument("--web-research-limit", type=int, default=5)
     run.add_argument("--ocr-images", action="store_true")
     run.add_argument("--extract-pdfs", action="store_true")
     run.add_argument("--plan-reference-search", action="store_true")
@@ -151,6 +166,9 @@ def _build_parser() -> argparse.ArgumentParser:
     bakeoff.add_argument("--terms-file")
     bakeoff.add_argument("--pack", "--materials", action="append", dest="pack_paths")
     bakeoff.add_argument("--additional-research-file", action="append", dest="additional_research_files")
+    bakeoff.add_argument("--web-research-query", action="append", dest="web_research_queries")
+    bakeoff.add_argument("--web-research-endpoint")
+    bakeoff.add_argument("--web-research-limit", type=int, default=5)
     bakeoff.add_argument("--ocr-images", action="store_true")
     bakeoff.add_argument("--extract-pdfs", action="store_true")
     bakeoff.add_argument("--plan-reference-search", action="store_true")
@@ -173,12 +191,17 @@ def _run_transcribe(
     image_ocr=None,
     summarizer=None,
     reference_lookup_client=None,
+    web_research_client=None,
     command_runner=None,
 ) -> int:
     output_dir = Path(args.output)
     output_dir.mkdir(parents=True, exist_ok=True)
     terms, pack = _load_prompt_terms(args, output_dir, image_ocr=image_ocr)
-    additional_research_items = _load_additional_research(args, output_dir)
+    additional_research_items, web_research_manifest = _load_research_inputs(
+        args,
+        output_dir,
+        web_research_client=web_research_client,
+    )
     reference_lookup_plans = _maybe_plan_reference_search(args, output_dir, pack)
     reference_lookup_results = _maybe_lookup_references(
         args,
@@ -263,6 +286,7 @@ def _run_transcribe(
         reference_lookup_planned=getattr(args, "plan_reference_search", False),
         references_looked_up=getattr(args, "lookup_references", False),
         additional_research_manifest=_additional_research_manifest(additional_research_items),
+        web_research_manifest=web_research_manifest,
         review_queue_manifest=review_queue_manifest,
         glossary_manifest=glossary_manifest,
         correction_manifest=_correction_manifest(args),
@@ -270,11 +294,11 @@ def _run_transcribe(
     return 0
 
 
-def _run_bakeoff(args, transcriber, *, image_ocr=None, command_runner=None) -> int:
+def _run_bakeoff(args, transcriber, *, image_ocr=None, web_research_client=None, command_runner=None) -> int:
     output_dir = Path(args.output)
     output_dir.mkdir(parents=True, exist_ok=True)
     terms, pack = _load_prompt_terms(args, output_dir, image_ocr=image_ocr)
-    _load_additional_research(args, output_dir)
+    _load_research_inputs(args, output_dir, web_research_client=web_research_client)
     plans = _maybe_plan_reference_search(args, output_dir, pack)
     _maybe_lookup_references(args, output_dir, pack, plans, None)
     _maybe_extract_pdfs(args, output_dir, pack, command_runner)
@@ -389,16 +413,42 @@ def _load_prompt_terms(args, output_dir: Path, *, image_ocr=None):
     return prompt_terms, pack
 
 
-def _load_additional_research(args, output_dir: Path):
+def _load_research_inputs(args, output_dir: Path, *, web_research_client=None):
     paths = tuple(getattr(args, "additional_research_files", None) or ())
-    if not paths:
-        return ()
-    items = load_additional_research_files(paths)
-    (output_dir / "additional_research.json").write_text(
-        json.dumps(additional_research_to_dict(items), ensure_ascii=False, indent=2),
+    web_items, web_manifest = _load_web_research(args, output_dir, web_research_client=web_research_client)
+    items = tuple(load_additional_research_files(paths)) + web_items
+    if items:
+        (output_dir / "additional_research.json").write_text(
+            json.dumps(additional_research_to_dict(items), ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+    return items, web_manifest
+
+
+def _load_web_research(args, output_dir: Path, *, web_research_client=None):
+    queries = tuple(getattr(args, "web_research_queries", None) or ())
+    if not queries:
+        return (), {"enabled": False}
+    endpoint = getattr(args, "web_research_endpoint", None)
+    if not endpoint:
+        raise ValueError("--web-research-endpoint is required when --web-research-query is set")
+    limit = max(1, int(getattr(args, "web_research_limit", 5)))
+    client = web_research_client or WebResearchHttpClient()
+    items = []
+    config = WebResearchConfig(endpoint=endpoint, limit=limit)
+    for query in queries:
+        items.extend(search_web_research(query, config=config, http_client=client))
+    results = tuple(items)
+    (output_dir / "web_research_results.json").write_text(
+        json.dumps(web_research_to_dict(results), ensure_ascii=False, indent=2),
         encoding="utf-8",
     )
-    return items
+    return results, {
+        "enabled": True,
+        "endpoint": endpoint,
+        "query_count": len(queries),
+        "item_count": len(results),
+    }
 
 
 def _maybe_extract_pdfs(
@@ -695,6 +745,7 @@ def _write_run_manifest(
     reference_lookup_planned: bool,
     references_looked_up: bool,
     additional_research_manifest: dict[str, object],
+    web_research_manifest: dict[str, object],
     review_queue_manifest: dict[str, object],
     glossary_manifest: dict[str, object],
     correction_manifest: dict[str, object],
@@ -715,6 +766,7 @@ def _write_run_manifest(
                 "reference_lookup_planned": reference_lookup_planned,
                 "references_looked_up": references_looked_up,
                 "additional_research": additional_research_manifest,
+                "web_research": web_research_manifest,
                 "review_queue": review_queue_manifest,
                 "glossary": glossary_manifest,
                 "correction": correction_manifest,

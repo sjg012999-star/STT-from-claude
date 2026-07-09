@@ -160,6 +160,23 @@ class FakeReferenceLookupClient:
         return b"%PDF-1.7 fake paper"
 
 
+class FakeWebResearchClient:
+    def __init__(self):
+        self.urls = []
+
+    def get_json(self, url):
+        self.urls.append(url)
+        return {
+            "items": [
+                {
+                    "title": "InTesTiny nanoparticle paper",
+                    "url": "https://example.org/intestiny",
+                    "snippet": "RGD targeting appears in the nanoparticle design.",
+                }
+            ]
+        }
+
+
 class CliTest(unittest.TestCase):
     def test_transcribe_writes_json_and_markdown_with_terms(self):
         transcriber = FakeTranscriber()
@@ -963,6 +980,60 @@ class CliTest(unittest.TestCase):
             "InTesTiny nanoparticle context",
         )
         self.assertTrue(manifest["additional_research"]["enabled"])
+
+    def test_run_can_load_explicit_web_research_query_for_notes_and_rich_summary(self):
+        transcriber = FakeTranscriber()
+        summarizer = FakeRichSummarizer()
+        web_research_client = FakeWebResearchClient()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            audio_path = root / "sample.wav"
+            output_dir = root / "out"
+            audio_path.write_bytes(b"fake audio")
+
+            exit_code = main(
+                [
+                    "run",
+                    str(audio_path),
+                    "--profile",
+                    "seminar",
+                    "--provider",
+                    "gpt-4o",
+                    "--web-research-query",
+                    "InTesTiny RGD nanoparticle",
+                    "--web-research-endpoint",
+                    "https://search.example.test/api",
+                    "--web-research-limit",
+                    "3",
+                    "--enrich-notes",
+                    "--llm-summarize",
+                    "--output",
+                    str(output_dir),
+                ],
+                transcriber=transcriber,
+                summarizer=summarizer,
+                web_research_client=web_research_client,
+            )
+
+            web_payload = json.loads(
+                (output_dir / "web_research_results.json").read_text(encoding="utf-8")
+            )
+            research_payload = json.loads(
+                (output_dir / "additional_research.json").read_text(encoding="utf-8")
+            )
+            notes = (output_dir / "notes.md").read_text(encoding="utf-8")
+            manifest = json.loads((output_dir / "run_manifest.json").read_text(encoding="utf-8"))
+
+        self.assertEqual(exit_code, 0)
+        self.assertIn("q=InTesTiny%20RGD%20nanoparticle", web_research_client.urls[0])
+        self.assertEqual(web_payload["items"][0]["title"], "InTesTiny nanoparticle paper")
+        self.assertEqual(research_payload["items"][0]["title"], "InTesTiny nanoparticle paper")
+        self.assertIn("RGD targeting appears", notes)
+        self.assertEqual(
+            summarizer.calls[0]["additional_research_items"][0].title,
+            "InTesTiny nanoparticle paper",
+        )
+        self.assertTrue(manifest["web_research"]["enabled"])
 
 
 if __name__ == "__main__":

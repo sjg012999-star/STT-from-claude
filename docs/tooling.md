@@ -6,6 +6,8 @@ This project should keep OCR, PDF parsing, web search, STT, and LLM calls behind
 
 `src/stt_pipeline/additional_research.py` loads explicit `.md`, `.txt`, or `.json` research notes from `--additional-research-file`. This is the current safe bridge for broad web/reference search results: collect them outside the default STT path, then pass them in as source-labeled additional evidence. Do not turn live web search into a default dependency.
 
+`src/stt_pipeline/web_research.py` provides a generic JSON endpoint adapter for `--web-research-query`. It requires an explicit `--web-research-endpoint`, writes `web_research_results.json`, and merges normalized results into additional research evidence. Keep provider-specific search APIs behind this adapter or a separate explicit integration; never call live web search from the default STT path.
+
 `src/stt_pipeline/local_whisper.py` is an optional command adapter for `mlx_whisper`; keep it as a fallback and do not add `mlx-whisper` as a hard runtime dependency.
 
 Optional integration tests live in `tests/test_optional_integrations.py`. They skip by default unless the relevant CLI is installed or `STT_RUN_LIVE_REFERENCE_TESTS=1` is set.
