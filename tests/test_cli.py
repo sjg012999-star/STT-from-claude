@@ -285,6 +285,41 @@ class CliTest(unittest.TestCase):
         self.assertIn("# Seminar Summary", summary)
         self.assertEqual(corrector.calls[0]["prompt_terms"], ())
 
+    def test_run_can_configure_correction_chunking(self):
+        transcriber = FakeTranscriber()
+        corrector = FakeCorrector()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            audio_path = root / "sample.wav"
+            output_dir = root / "out"
+            audio_path.write_bytes(b"fake audio")
+
+            exit_code = main(
+                [
+                    "run",
+                    str(audio_path),
+                    "--profile",
+                    "seminar",
+                    "--provider",
+                    "gpt-4o",
+                    "--correct",
+                    "--correction-chunk-size",
+                    "12",
+                    "--correction-overlap",
+                    "2",
+                    "--output",
+                    str(output_dir),
+                ],
+                transcriber=transcriber,
+                corrector=corrector,
+            )
+
+            manifest = json.loads((output_dir / "run_manifest.json").read_text(encoding="utf-8"))
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(manifest["correction"]["chunk_size"], 12)
+        self.assertEqual(manifest["correction"]["overlap"], 2)
+
     def test_run_can_ocr_image_materials(self):
         transcriber = FakeTranscriber()
         image_ocr = FakeImageOcr()

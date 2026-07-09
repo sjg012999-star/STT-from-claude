@@ -28,12 +28,13 @@ def _transcript():
 
 class FakeResponses:
     def __init__(self, payload):
-        self.payload = payload
+        self.payloads = list(payload) if isinstance(payload, list) else [payload]
         self.calls = []
 
     def create(self, **kwargs):
         self.calls.append(kwargs)
-        return {"output_text": json.dumps(self.payload)}
+        payload = self.payloads[min(len(self.calls) - 1, len(self.payloads) - 1)]
+        return {"output_text": json.dumps(payload)}
 
 
 class FakeClient:
@@ -91,6 +92,81 @@ class CorrectTest(unittest.TestCase):
         self.assertEqual(call["model"], "gpt-test")
         self.assertEqual(call["text"]["format"]["type"], "json_schema")
         self.assertIn("InTesTiny", json.dumps(call["input"]))
+
+    def test_openai_corrector_chunks_long_transcripts_with_overlap_context(self):
+        segments = tuple(
+            TranscriptSegment(
+                segment_id=f"seg_{index:03d}",
+                text=f"segment {index} mentions term {index}",
+                start_seconds=float(index),
+                end_seconds=float(index + 1),
+            )
+            for index in range(1, 6)
+        )
+        transcript = TranscriptResult(
+            provider="gpt-4o",
+            model="gpt-4o-transcribe",
+            profile="seminar",
+            text="\n".join(segment.text for segment in segments),
+            segments=segments,
+        )
+        client = FakeClient(
+            [
+                {
+                    "corrections": [
+                        {
+                            "segment_id": "seg_001",
+                            "original": "term 1",
+                            "corrected": "TERM-1",
+                            "reason": "test",
+                            "confidence": "high",
+                        }
+                    ]
+                },
+                {
+                    "corrections": [
+                        {
+                            "segment_id": "seg_003",
+                            "original": "term 3",
+                            "corrected": "TERM-3",
+                            "reason": "test",
+                            "confidence": "high",
+                        }
+                    ]
+                },
+                {
+                    "corrections": [
+                        {
+                            "segment_id": "seg_005",
+                            "original": "term 5",
+                            "corrected": "TERM-5",
+                            "reason": "test",
+                            "confidence": "high",
+                        }
+                    ]
+                },
+            ]
+        )
+        corrector = OpenAiTranscriptCorrector(
+            client=client,
+            model="gpt-test",
+            max_segments_per_request=2,
+            overlap_segments=1,
+        )
+
+        report = corrector.correct(transcript, prompt_terms=("TERM",))
+
+        self.assertEqual(len(client.responses.calls), 3)
+        self.assertEqual(
+            [chunk.target_segment_ids for chunk in report.chunks],
+            [("seg_001", "seg_002"), ("seg_003", "seg_004"), ("seg_005",)],
+        )
+        second_input = json.dumps(client.responses.calls[1]["input"])
+        self.assertIn("Context-only segments", second_input)
+        self.assertIn("seg_002", second_input)
+        self.assertIn("Target segments", second_input)
+        self.assertIn("seg_003", second_input)
+        self.assertIn("TERM-5", report.corrected_result.text)
 
 
 if __name__ == "__main__":

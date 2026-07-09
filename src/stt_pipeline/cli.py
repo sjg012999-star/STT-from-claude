@@ -72,6 +72,8 @@ def _build_parser() -> argparse.ArgumentParser:
     transcribe.add_argument("--pdf-page-render", action="store_true")
     transcribe.add_argument("--preprocess", action="store_true")
     transcribe.add_argument("--correct", action="store_true")
+    transcribe.add_argument("--correction-chunk-size", type=int)
+    transcribe.add_argument("--correction-overlap", type=int, default=1)
     transcribe.add_argument("--summarize", action="store_true")
     transcribe.add_argument("--output", required=True)
 
@@ -87,6 +89,8 @@ def _build_parser() -> argparse.ArgumentParser:
     run.add_argument("--pdf-page-render", action="store_true")
     run.add_argument("--preprocess", action="store_true")
     run.add_argument("--correct", action="store_true")
+    run.add_argument("--correction-chunk-size", type=int)
+    run.add_argument("--correction-overlap", type=int, default=1)
     run.add_argument("--summarize", action="store_true")
     run.add_argument("--output", required=True)
 
@@ -149,6 +153,7 @@ def _run_transcribe(
         result=result,
         corrected=correction_report is not None,
         summarized=getattr(args, "summarize", False),
+        correction_manifest=_correction_manifest(args),
     )
     return 0
 
@@ -301,7 +306,10 @@ def _maybe_write_corrections(
 ) -> CorrectionReport | None:
     if not getattr(args, "correct", False):
         return None
-    active_corrector = corrector or OpenAiTranscriptCorrector()
+    active_corrector = corrector or OpenAiTranscriptCorrector(
+        max_segments_per_request=getattr(args, "correction_chunk_size", None),
+        overlap_segments=getattr(args, "correction_overlap", 1),
+    )
     report = active_corrector.correct(result, prompt_terms=terms)
     _write_result_json(output_dir / "corrected_transcript.json", report.corrected_result)
     _write_result_markdown(output_dir / "corrected_transcript.md", report.corrected_result)
@@ -331,6 +339,7 @@ def _write_run_manifest(
     result: TranscriptResult,
     corrected: bool,
     summarized: bool,
+    correction_manifest: dict[str, object],
 ) -> None:
     path.write_text(
         json.dumps(
@@ -343,12 +352,21 @@ def _write_run_manifest(
                 "profile": result.profile,
                 "corrected": corrected,
                 "summarized": summarized,
+                "correction": correction_manifest,
             },
             ensure_ascii=False,
             indent=2,
         ),
         encoding="utf-8",
     )
+
+
+def _correction_manifest(args) -> dict[str, object]:
+    return {
+        "enabled": bool(getattr(args, "correct", False)),
+        "chunk_size": getattr(args, "correction_chunk_size", None),
+        "overlap": getattr(args, "correction_overlap", 1),
+    }
 
 
 def _write_bakeoff_manifest(

@@ -81,6 +81,14 @@ stt run sample.wav --profile seminar --provider gpt-4o --pack ./materials --ocr-
 
 `--preprocess`는 `ffmpeg`로 16kHz mono/loudness-normalized WAV를 만든 뒤 STT에 넘깁니다. `--correct`는 OpenAI Responses API에 구조화된 교정 JSON을 요청하고, 실제 세그먼트에 존재하는 원문만 바꿉니다. `--summarize`는 전사/교정 결과를 분리한 기본 Markdown 요약을 만듭니다.
 
+긴 녹음은 교정 요청을 세그먼트 단위로 나눌 수 있습니다:
+
+```bash
+stt run sample.wav --profile seminar --provider gpt-4o --pack ./materials --correct --correction-chunk-size 40 --correction-overlap 3 --output out/seminar
+```
+
+청크 정보는 `corrections.json`과 `run_manifest.json`에 남습니다.
+
 직접 만든 용어 힌트 파일만 추가:
 
 ```bash
