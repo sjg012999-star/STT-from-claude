@@ -231,6 +231,7 @@ stt-conference/
 │   ├── knowledge_pack.py     # 자료 단서 우선순위화 + 전사/슬라이드 정렬 + PDF 추출 작업 계획
 │   ├── llm_provider.py       # OpenAI-first LLM/vision 작업 계획
 │   ├── stt_provider.py       # OpenAI STT provider aliases + live adapter + normalized transcript output
+│   ├── local_whisper.py      # mlx-whisper command adapter (offline fallback)
 │   ├── transcript.py         # 공통 transcript/segment dataclass
 │   ├── slide_extract.py      # OCR 텍스트 → 슬라이드 근거 구조화
 │   ├── reference_lookup.py   # DOI/레퍼런스 검색 URL 계획
@@ -270,7 +271,8 @@ stt-conference/
 ## 7. 구현 로드맵
 
 ### Phase 1 — MVP (CLI, 학회 프로필)
-- [x] **STT adapter + bake-off CLI** — `gpt-4o`, `gpt-4o-mini`, `whisper-1`, `diarize` 후보를 같은 녹음으로 비교 가능
+- [x] **STT adapter + bake-off CLI** — `gpt-4o`, `gpt-4o-mini`, `whisper-1`, `diarize`, `mlx-whisper` 후보를 같은 녹음으로 비교 가능
+- [x] 로컬 `mlx-whisper` fallback adapter (optional command, hard dependency 아님)
 - [x] `stt run seminar.wav --profile seminar --pack ./materials/` 기본 흐름 — 텍스트/PPTX/OCR JSON 자료에서 prompt terms 생성 후 transcript.md/transcript.json 출력
 - [x] 전처리 옵션 → 클라우드 STT → md/json/srt 출력
 - [x] 긴 녹음 업로드 제한 대응: ffmpeg chunking + 전사 병합 (`--chunk-audio`)

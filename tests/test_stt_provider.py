@@ -4,6 +4,7 @@ import unittest
 
 from stt_pipeline.stt_provider import (
     OpenAiSttTranscriber,
+    RoutedSttTranscriber,
     build_openai_stt_request,
     default_provider_for_profile,
 )
@@ -90,6 +91,47 @@ class SttProviderTest(unittest.TestCase):
         call = client.transcriptions.calls[0]
         self.assertEqual(call["model"], "gpt-4o-transcribe")
         self.assertIn("prompt", call)
+
+    def test_routed_transcriber_dispatches_mlx_whisper_provider(self):
+        class FakeOpenAi:
+            def __init__(self):
+                self.calls = []
+
+            def transcribe(self, audio_path, *, provider=None, profile="seminar", prompt_terms=()):
+                self.calls.append(provider)
+                return _result(provider or "gpt-4o", "openai-model")
+
+        class FakeMlx:
+            def __init__(self):
+                self.calls = []
+
+            def transcribe(self, audio_path, *, provider=None, profile="seminar", prompt_terms=()):
+                self.calls.append(provider)
+                return _result("mlx-whisper", "mlx-model")
+
+        openai = FakeOpenAi()
+        mlx = FakeMlx()
+        router = RoutedSttTranscriber(openai_transcriber=openai, mlx_transcriber=mlx)
+
+        local_result = router.transcribe("sample.wav", provider="mlx-whisper", profile="seminar")
+        cloud_result = router.transcribe("sample.wav", provider="gpt-4o", profile="seminar")
+
+        self.assertEqual(local_result.provider, "mlx-whisper")
+        self.assertEqual(cloud_result.provider, "gpt-4o")
+        self.assertEqual(mlx.calls, ["mlx-whisper"])
+        self.assertEqual(openai.calls, ["gpt-4o"])
+
+
+def _result(provider, model):
+    from stt_pipeline.transcript import TranscriptResult, TranscriptSegment
+
+    return TranscriptResult(
+        provider=provider,
+        model=model,
+        profile="seminar",
+        text=f"{provider} transcript",
+        segments=(TranscriptSegment(segment_id="seg_001", text=f"{provider} transcript"),),
+    )
 
 
 if __name__ == "__main__":

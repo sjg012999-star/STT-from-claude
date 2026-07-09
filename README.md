@@ -17,6 +17,7 @@
 - [x] Phase 1 Knowledge Pack 우선순위 스캐폴드 → `src/stt_pipeline/knowledge_pack.py`
 - [x] OCR 텍스트/레퍼런스 PDF 추출 어댑터 경계 → `src/stt_pipeline/slide_extract.py`, `src/stt_pipeline/pdf_tools.py`
 - [x] OpenAI STT adapter + provider bakeoff CLI → `src/stt_pipeline/stt_provider.py`, `src/stt_pipeline/cli.py`
+- [x] 로컬 `mlx-whisper` fallback adapter → `src/stt_pipeline/local_whisper.py`
 - [x] `stt run ... --pack ./materials` 기본 실행 흐름 → 텍스트/PPTX/OCR JSON 자료에서 STT prompt terms 생성
 - [x] 전처리 옵션, 긴 녹음 chunking 옵션, SRT 출력, OpenAI 교정 옵션, 기본 요약 출력
 - [x] OpenAI vision 기반 슬라이드 사진 OCR 옵션
@@ -143,8 +144,16 @@ stt transcribe sample.wav --profile seminar --provider gpt-4o --terms-file terms
 Whisper와 최신 OpenAI STT 후보 비교:
 
 ```bash
-stt bakeoff sample.wav --profile seminar --providers whisper-1,gpt-4o,gpt-4o-mini --output out/bakeoff
+stt bakeoff sample.wav --profile seminar --providers whisper-1,gpt-4o,gpt-4o-mini,mlx-whisper --output out/bakeoff
 ```
+
+로컬 fallback만 실행:
+
+```bash
+stt transcribe sample.wav --profile seminar --provider mlx-whisper --output out/local
+```
+
+`mlx-whisper`는 기본 경로가 아니라 오프라인/비상 fallback입니다. 실행 환경에 `mlx_whisper` CLI가 설치되어 있어야 하며, 필요하면 `MLX_WHISPER_COMMAND`와 `MLX_WHISPER_MODEL`로 command/model을 바꿀 수 있습니다.
 
 ## Knowledge Pack 원칙
 

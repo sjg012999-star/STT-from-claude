@@ -29,7 +29,7 @@ from stt_pipeline.reference_lookup import (
     reference_lookup_results_to_dict,
 )
 from stt_pipeline.rich_summary import OpenAiRichSummarizer
-from stt_pipeline.stt_provider import OpenAiSttTranscriber
+from stt_pipeline.stt_provider import RoutedSttTranscriber
 from stt_pipeline.summarize import build_basic_summary
 from stt_pipeline.transcript import TranscriptResult
 from stt_pipeline.vision_ocr import OpenAiSlideImageOcr
@@ -47,7 +47,7 @@ def main(
 ) -> int:
     parser = _build_parser()
     args = parser.parse_args(argv)
-    active_transcriber = transcriber or OpenAiSttTranscriber()
+    active_transcriber = transcriber or RoutedSttTranscriber()
 
     if args.command in {"transcribe", "run"}:
         return _run_transcribe(

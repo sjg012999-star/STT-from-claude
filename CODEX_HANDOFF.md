@@ -15,6 +15,7 @@ Do not force-push or overwrite the original Claude branch. If Claude resumes wor
 - Added this handoff file plus agent notes so future Claude/Codex sessions can recover context quickly.
 - Added a tested Phase 1 Knowledge Pack scaffold in `src/stt_pipeline/knowledge_pack.py`.
 - Added OpenAI STT adapter and CLI outputs for `transcript.md` / `transcript.json`.
+- Added optional local `mlx-whisper` fallback adapter and provider routing.
 - Added material-pack prompt term extraction for text, Markdown, PPTX, and slide OCR JSON.
 - Added optional ffmpeg preprocessing, audio chunking, SRT output, OpenAI structured correction, and basic Markdown summary output.
 - Added optional OpenAI vision OCR for slide photos via `--ocr-images`.
@@ -27,7 +28,7 @@ Do not force-push or overwrite the original Claude branch. If Claude resumes wor
 - Added OpenAI LLM source-labeled rich summary output via `--llm-summarize`.
 - Updated README and PLAN to reflect reference-first, deck-level slide analysis and transcript/slide mutual support.
 
-Live OpenAI STT is wired behind `OpenAiSttTranscriber`, optional OpenAI transcript correction is wired behind `OpenAiTranscriptCorrector`, optional slide-photo OCR is wired behind `OpenAiSlideImageOcr`, reference lookup planning is deterministic behind `--plan-reference-search`, live Crossref lookup/open PDF caching is behind `--lookup-references`, optional PDF figure/table extraction execution is wired behind explicit CLI flags, deterministic source-separated notes are wired behind `--enrich-notes`, and OpenAI source-labeled rich summaries are wired behind `--llm-summarize`. Tests still use fakes and do not call paid or network APIs. Broad web search and publisher-specific PDF fallback are not wired yet.
+Live OpenAI STT is wired behind `OpenAiSttTranscriber`, local `mlx-whisper` is routed only when `--provider mlx-whisper` is selected, optional OpenAI transcript correction is wired behind `OpenAiTranscriptCorrector`, optional slide-photo OCR is wired behind `OpenAiSlideImageOcr`, reference lookup planning is deterministic behind `--plan-reference-search`, live Crossref lookup/open PDF caching is behind `--lookup-references`, optional PDF figure/table extraction execution is wired behind explicit CLI flags, deterministic source-separated notes are wired behind `--enrich-notes`, and OpenAI source-labeled rich summaries are wired behind `--llm-summarize`. Tests still use fakes and do not call paid or network APIs. Broad web search and publisher-specific PDF fallback are not wired yet.
 
 ## Current Repo Contents
 
@@ -40,6 +41,7 @@ Live OpenAI STT is wired behind `OpenAiSttTranscriber`, optional OpenAI transcri
 - `src/stt_pipeline/knowledge_pack.py`: reference-first Knowledge Pack planner.
 - `src/stt_pipeline/llm_provider.py`: OpenAI-first LLM request planning.
 - `src/stt_pipeline/stt_provider.py`: OpenAI STT request planning, live adapter, and normalized transcript output.
+- `src/stt_pipeline/local_whisper.py`: optional `mlx_whisper` command adapter and JSON normalizer.
 - `src/stt_pipeline/transcript.py`: shared transcript result dataclasses.
 - `src/stt_pipeline/audio_chunks.py`: ffmpeg segment planning plus chunk transcript timestamp merging.
 - `src/stt_pipeline/materials.py`: material-pack loader for text, Markdown, PPTX, and slide OCR JSON prompt terms.
@@ -55,6 +57,7 @@ Live OpenAI STT is wired behind `OpenAiSttTranscriber`, optional OpenAI transcri
 - `src/stt_pipeline/reference_lookup.py`: DOI/Crossref/OpenAlex lookup planning plus Crossref metadata/open PDF cache adapter.
 - `src/stt_pipeline/pdf_tools.py`: command builder for the existing PDF figure/table extraction script.
 - `tests/test_knowledge_pack.py`: tests for prioritization, PDF extraction jobs, and transcript-slide alignment.
+- `tests/test_local_whisper.py`: tests for optional `mlx_whisper` command planning and JSON normalization.
 - `tests/test_audio_chunks.py`: tests for ffmpeg chunk planning and merged transcript offsets.
 - `tests/test_slide_extract.py`: tests for OCR text classification into slide evidence.
 - `tests/test_reference_lookup.py`: tests for DOI extraction, reference lookup planning, fake Crossref metadata, and PDF cache.
@@ -65,12 +68,13 @@ Live OpenAI STT is wired behind `OpenAiSttTranscriber`, optional OpenAI transcri
 ## Next Implementation Order
 
 1. Add Semantic Scholar/OpenAlex fallback and publisher-specific PDF fallback behind `reference_lookup.py`.
-2. Add skipped integration tests for optional reference/PDF tools before making them default.
-3. Add local `mlx-whisper` fallback only after adapter tests exist.
+2. Add skipped integration tests for optional reference/PDF/tools before making them default.
+3. Add glossary accumulation from accepted corrections.
 
 Keep real cloud STT and OpenAI API calls behind adapters. Tests should use fakes and local fixtures, not paid network calls.
 OpenAI text model names must come from `OPENAI_MODEL`; use `OPENAI_VISION_MODEL` only when a distinct vision model is needed. Do not hardcode another provider model into the pipeline.
-The STT adapter already supports `gpt-4o`, `gpt-4o-mini`, `whisper-1`, and `diarize` provider aliases. Knowledge Pack remains optional; Phase 1 uses compact STT prompt hints, not heavy enrichment.
+The STT router supports `gpt-4o`, `gpt-4o-mini`, `whisper-1`, `diarize`, and `mlx-whisper` provider aliases. Knowledge Pack remains optional; Phase 1 uses compact STT prompt hints, not heavy enrichment.
+Use `--provider mlx-whisper` only when the local `mlx_whisper` CLI is installed. Configure it with `MLX_WHISPER_COMMAND` and `MLX_WHISPER_MODEL`; it is an offline fallback, not the default quality path.
 `stt run ... --pack ./materials` now merges `--terms-file` with prompt terms extracted from `.txt`, `.md`, `.pptx`, slide OCR `.json`, and slide photos when `--ocr-images` is passed. PDFs are not mixed into prompt terms; they are tracked as `pdf_sources` and can be processed with `--extract-pdfs --pdf-extractor-script ...`.
 Use `--plan-reference-search` to write `reference_lookup_jobs.json` with DOI, Crossref, OpenAlex, and DOI URL candidates. This does not perform network lookup or download.
 Use `--lookup-references` to perform live Crossref metadata lookup and cache open PDF links into `reference_cache/*.pdf`. It also writes `reference_lookup_results.json`; when combined with `--extract-pdfs`, cached PDFs are passed to the figure/table extraction workflow.
