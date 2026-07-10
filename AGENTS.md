@@ -14,6 +14,7 @@ Project intent:
 - Keep one pipeline with profile-specific settings rather than separate STT models per use case.
 - Treat transcript correction and AI enrichment as separate layers with explicit provenance.
 - Use OpenAI-first LLM/vision providers for new implementation work unless the user explicitly requests another provider.
+- Preserve transcript versions: `V0_raw` is immutable, `V1_context_only` is the legacy July 7 comparison, `V1_conference_aware` is the current all-date baseline, and `V2_material_grounded` is reserved for slide/PDF evidence.
 
 Development guidance:
 
@@ -24,4 +25,5 @@ Development guidance:
 - Read `docs/tooling.md` before adding OCR/PDF dependencies.
 - Do not call paid or network APIs in tests; use fakes and fixtures.
 - Add small, testable modules rather than a single large script.
+- For CRS context correction, use `conference-jobs` and `conference-apply`; the apply step must accept only Codex ChatGPT OAuth provenance and exact source substrings.
 - Avoid committing real recordings, API keys, generated transcripts from private sessions, or conference materials.

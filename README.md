@@ -31,6 +31,7 @@
 - [x] 명시적 추가 조사 파일(`--additional-research-file`)을 source-labeled evidence로 반영
 - [x] 명시적 web/reference search endpoint adapter (`--web-research-query`, 기본 비활성)
 - [x] glossary 후보와 낮은 품질 reference metadata를 위한 `review_queue.json` + 정적 HTML 검수 경로
+- [x] CRS 전체 일정/세션/발표자 맥락을 이용한 OAuth 교정 job + `V1_conference_aware` exact-apply 경로
 - [x] Phase 1: MVP (CLI, 학회 프로필)
 - [ ] Phase 2: 회의/강연 프로필, 용어집 자동 누적
 - [ ] Phase 3: 웹 UI, 검수 도구
@@ -51,6 +52,40 @@ stt transcribe sample.wav --profile seminar --provider gpt-4o --output out/semin
 ```
 
 그다음 Codex에서 `transcript.json`과 선택적 보강자료를 읽어 별도 버전의 교정본과 변경 내역을 생성합니다. 원본 전사는 덮어쓰지 않습니다.
+
+### 학회 전체 맥락을 이용한 V1 교정
+
+여러 녹음을 한 학회의 통합 일정과 대조할 때는 먼저 결정론적 job을 만듭니다. 이 명령은 네트워크나 유료 API를 호출하지 않습니다.
+
+```bash
+stt conference-jobs \
+  outputs/crs_2026_2026-07-06 \
+  outputs/crs_2026_2026-07-07 \
+  outputs/crs_2026_2026-07-08 \
+  outputs/crs_2026_2026-07-09 \
+  --conference-data /path/to/crs2026_data.json \
+  --recording-manifest /path/to/recording_manifest.tsv \
+  --batch-index outputs/V1_conference_aware_jobs.json
+```
+
+각 job에는 V0 전사, 공식 세션/발표/발표자, 인접 발표, 녹음명과 시간, 근거 ID가 함께 들어갑니다. 일정은 계획 정보일 뿐이므로 실제 발표 도입과 전환 문장이 파일명이나 예정 시각보다 우선합니다. 활성 Codex ChatGPT 로그인/OAuth 작업이 `responses/`에 근거가 표시된 응답을 작성하며, 적용 단계는 해당 provenance를 검증합니다.
+
+```bash
+stt conference-apply \
+  outputs/crs_2026_2026-07-06 \
+  outputs/crs_2026_2026-07-07 \
+  outputs/crs_2026_2026-07-08 \
+  outputs/crs_2026_2026-07-09 \
+  --minimum-confidence medium \
+  --require-all-responses \
+  --summary-output outputs/V1_conference_aware_apply_summary.json
+```
+
+`conference-apply`도 API를 호출하지 않습니다. 원문에 정확히 존재하는 문자열만 바꾸고, high/medium은 V1에 적용하며 low는 보류합니다. 출력은 날짜별 `versions/V1_conference_aware/` 아래의 교정 전사, 근거가 있는 correction log, V0/V1 비교, review queue, source SHA-256 manifest로 구성됩니다.
+
+- `V0_raw`: 유료 STT가 만든 불변 원본
+- `V1_conference_aware`: 자료 없이 학회/세션/발표/전사 문맥만 사용한 교정본
+- `V2_material_grounded`: 슬라이드, 레퍼런스 PDF, figure/table 근거를 추가할 향후 버전
 
 초기 1회 설치:
 

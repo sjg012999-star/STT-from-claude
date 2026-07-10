@@ -6,13 +6,19 @@
 - The remaining July 6, 8, and 9 V0 batch is complete: 36 recordings, 45,522.371 seconds, 101,788 transcript words, and 97 STT chunks. The official `gpt-4o-transcribe` estimate is $4.552 at $0.006/minute; this is an estimate, not a dashboard-confirmed final charge.
 - Start review at `outputs/crs_2026_remaining_v0_summary.md`, then open the date indexes under `outputs/crs_2026_2026-07-06/`, `outputs/crs_2026_2026-07-08/`, and `outputs/crs_2026_2026-07-09/`. These ignored outputs are private artifacts and must not be committed.
 - Full V0 QA passed for all 36 recordings: model and source mappings, required outputs, paid-feature disable flags, chunk inventories, 16 kHz mono PCM preprocessing, and source/preprocessed durations. The maximum duration delta was 0.000042 seconds; the 18-second LAI short clip is the only accepted `no_speech` result.
-- Context-only OAuth post-processing has not yet been run for these 36 recordings. Preserve V0 unchanged, write any no-material correction as a separate V1, and reserve material-grounded work for a separate V2.
+- `V1_conference_aware` is complete for all 51 CRS recordings across July 6-9. It uses the integrated CRS archive, recording-match manifest, full session/presentation/speaker schedule, transcript introductions, and neighboring-talk transitions; slides, PDFs, references, and web research were excluded.
+- All 51 responses were produced through Codex with ChatGPT OAuth using `gpt-5.5`, then applied locally without a Platform API call. Final totals are 369 applied exact-match corrections (277 high, 92 medium), 7 low-confidence corrections withheld, and 0 rejected. All 51 V0 SHA-256 checks remain unchanged and all 55 presentation-alignment records pass evidence validation.
+- Start review at `outputs/V1_conference_aware_apply_summary.json`, then each date's `versions/V1_conference_aware/index.md`, `comparison_overview.md`, and `review_queue.md`. Medium-confidence changes remain applied but are all listed for spot-checking.
+- The user's `Mart` example is represented as the medium-confidence syntax-aware correction `with Long Acting Drug Mart, developing` -> `with long-acting drugs as part of developing`; the surrounding article was also restored as `an ultra-long-acting injectable`.
+- The live order diverged from stale filenames on July 9. The V1 alignment correctly identifies TBAJ at 11:37, echinococcosis spatial distribution at 11:47, ocular LNP at 11:57, hydrogel at 12:07, glioblastoma nanocrystals at 12:17, biomolecular corona at 15:22, and local-vs-systemic tropism at 15:32.
+- Local CRS inputs currently live at `/Users/jungisung/Documents/CRS_2026_session_archive/crs2026_data.json` and `recording_match/CRS_recording_rename_manifest_v2_final.tsv`. They are source context, not repository artifacts.
 - WAV chunking now uses ffmpeg stream copy after preprocessing, avoiding a redundant second PCM encode. Non-WAV inputs retain the previous re-encode behavior; focused and full tests cover this path.
 - The local Codex CLI reports `Logged in using ChatGPT`. `codex exec --ignore-user-config ... -m gpt-5.5` was verified through subscription access, but the current app task is preferred because repeated cold CLI runs waste plan tokens on startup context.
 - The current global config enables fast mode, which consumes plan credits faster. Do not use fast mode for bulk transcript post-processing.
 - A real July 7 conference batch was processed locally under the ignored `outputs/crs_2026_2026-07-07/` directory. Do not commit recordings, transcripts, slide materials, or generated private-session artifacts.
 - `V0_raw` and the no-material `V1_context_only` are complete for 15 recordings. V1 uses exact-match first-pass correction plus a blind conservative second pass; the raw transcript was not overwritten.
 - Start local result review at `outputs/crs_2026_2026-07-07/comparison_overview.md`. The combined V1 transcript and per-session diffs are under `versions/V1_context_only/`.
+- Keep that older `V1_context_only` comparison untouched. The current no-material baseline for all four dates is `V1_conference_aware`; both derive independently from V0.
 - `V2_material_grounded` is intentionally pending user-provided materials. Its unresolved evidence queue is `outputs/crs_2026_2026-07-07/versions/V2_material_grounded/review_queue.md`; V2 must start from the same V0 and remain separate from V1 for a fair comparison.
 - Static review UI implementation, CLI wiring, tests, and documentation are included on `codex/phase1-mvp`.
 - Browser QA confirmed desktop interactions, mobile layout without horizontal overflow, and decision JSON generation after status changes.
@@ -57,6 +63,9 @@ Do not force-push or overwrite the original Claude branch. If Claude resumes wor
 - Added skipped-by-default optional integration checks for live reference/publisher fallback and configured PDF extractor scripts.
 - Added generic live web/reference search adapter via `--web-research-query` plus explicit `--web-research-endpoint`; results are merged only as `additional_research`.
 - Updated README and PLAN to reflect reference-first, deck-level slide analysis and transcript/slide mutual support.
+- Added conference archive/recording manifest loaders plus deterministic session/presentation matching in `conference_context.py`.
+- Added OAuth correction jobs, evidence/provenance validation, exact application, V0 hash protection, comparisons, and review queues in `conference_correction.py`.
+- Added `stt conference-jobs` and `stt conference-apply`; neither command calls a paid or network API.
 
 Live OpenAI STT is wired behind `OpenAiSttTranscriber`, Gemini audio transcription is wired behind `GeminiAudioTranscriber`, optional OpenAI transcript correction is wired behind `OpenAiTranscriptCorrector`, optional slide-photo OCR is wired behind `OpenAiSlideImageOcr`, reference lookup planning is deterministic behind `--plan-reference-search`, live Crossref/OpenAlex/Semantic Scholar lookup plus publisher PDF fallback/open PDF caching is behind `--lookup-references`, optional PDF figure/table extraction execution is wired behind explicit CLI flags, deterministic source-separated notes are wired behind `--enrich-notes`, explicit external research files are wired behind `--additional-research-file`, explicit web search endpoint calls are wired behind `--web-research-query`, review queues are wired behind `--write-review-queue`, accepted glossary decisions are wired through `--review-decisions-file`, and OpenAI source-labeled rich summaries are wired behind `--llm-summarize`. Tests still use fakes and do not call paid or network APIs.
 
@@ -87,6 +96,8 @@ Live OpenAI STT is wired behind `OpenAiSttTranscriber`, Gemini audio transcripti
 - `src/stt_pipeline/notes.py`: deterministic source-separated enriched notes generation.
 - `src/stt_pipeline/vision_ocr.py`: OpenAI vision slide-photo OCR adapter using Responses API image inputs.
 - `src/stt_pipeline/cli.py`: `run`, `transcribe`, `bakeoff`, and `review-ui` command handlers.
+- `src/stt_pipeline/conference_context.py`: CRS archive, recording manifest, session/presentation matching, warnings, and evidence catalog.
+- `src/stt_pipeline/conference_correction.py`: conference-aware job contracts, OAuth provenance validation, exact correction application, version manifests, and indexes.
 - `src/stt_pipeline/slide_extract.py`: OCR-text-to-slide-evidence heuristics.
 - `src/stt_pipeline/reference_lookup.py`: DOI/Crossref/OpenAlex/Semantic Scholar lookup planning plus metadata quality scoring, publisher PDF fallback, and open PDF cache adapter.
 - `src/stt_pipeline/pdf_tools.py`: command builder for the existing PDF figure/table extraction script.
@@ -102,13 +113,16 @@ Live OpenAI STT is wired behind `OpenAiSttTranscriber`, Gemini audio transcripti
 - `tests/test_rich_summary.py`: tests for structured rich summary rendering and source-label rejection.
 - `tests/test_glossary.py`: tests for correction-pair glossary build/merge/read/write.
 - `tests/test_optional_integrations.py`: skipped-by-default checks for live reference/publisher lookup and configured PDF extractor scripts.
+- `tests/test_conference_context.py`: schedule, track, transcript, stale-filename, and manifest matching tests.
+- `tests/test_conference_correction.py`: OAuth provenance, plenary alignment, evidence validation, exact apply, confidence threshold, and V0 preservation tests.
 - `docs/tooling.md`: GitHub/tooling candidates and integration rules.
 
 ## Next Implementation Order
 
-1. Add provider-specific web search integrations only behind explicit flags/config, if a real endpoint is chosen.
-2. Test the static review UI on real non-private samples; add Gradio and low-confidence audio links only if that workflow proves insufficient.
-3. Expand publisher fallback coverage only after optional integration samples prove value.
+1. Build `V2_material_grounded` from the same V0 only after slide photos/decks or reference PDFs are supplied; do not layer it on top of V1.
+2. Spot-check the 92 medium-confidence V1 changes in the date-level review queues and preserve decisions as a separate review artifact.
+3. Test the static review UI on real non-private samples; add Gradio and low-confidence audio links only if that workflow proves insufficient.
+4. Add provider-specific web search integrations or publisher fallbacks only when V2 has a concrete unresolved reference need.
 
 Keep real cloud STT and OpenAI API calls behind adapters. Tests should use fakes and local fixtures, not paid network calls.
 OpenAI text model names must come from `OPENAI_MODEL`; use `OPENAI_VISION_MODEL` only when a distinct vision model is needed. Do not hardcode another provider model into the pipeline.

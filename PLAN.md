@@ -286,6 +286,7 @@ stt-conference/
 - [x] 적용된 교정쌍 TSV glossary 저장/재사용 (`--save-glossary`, `--terms-file`)
 - [x] 프로필별 기본 요약: 세미나 talk flow, 강연 outline/key messages, 회의 decisions/action items
 - [x] OpenAI LLM 기반 source-labeled rich summary (`--llm-summarize`)
+- [x] CRS 전체 일정/세션/발표자 맥락 job + Codex OAuth 응답 + exact-apply `V1_conference_aware`
 - **완료 기준**: `stt run seminar.wav --profile seminar --pack ./materials/` 한 줄로 transcript.md 생성
 
 ### Phase 2 — 프로필 완성

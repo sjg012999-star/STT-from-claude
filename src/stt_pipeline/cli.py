@@ -11,6 +11,15 @@ from stt_pipeline.additional_research import (
     load_additional_research_files,
 )
 from stt_pipeline.audio_chunks import chunk_audio, merge_chunk_transcripts
+from stt_pipeline.conference_context import (
+    load_conference_archive,
+    load_recording_manifest,
+)
+from stt_pipeline.conference_correction import (
+    VERSION_NAME as CONFERENCE_VERSION_NAME,
+    apply_conference_correction_responses,
+    generate_conference_correction_jobs,
+)
 from stt_pipeline.correct import (
     OpenAiTranscriptCorrector,
     CorrectionReport,
@@ -75,6 +84,10 @@ def main(
 
     if args.command == "review-ui":
         return _run_review_ui(args)
+    if args.command == "conference-jobs":
+        return _run_conference_jobs(args)
+    if args.command == "conference-apply":
+        return _run_conference_apply(args)
 
     if args.command in {"transcribe", "run"}:
         active_transcriber = transcriber or RoutedSttTranscriber()
@@ -190,6 +203,24 @@ def _build_parser() -> argparse.ArgumentParser:
     review_ui.add_argument("review_queue_path")
     review_ui.add_argument("--output")
 
+    conference_jobs = subparsers.add_parser("conference-jobs")
+    conference_jobs.add_argument("output_roots", nargs="+")
+    conference_jobs.add_argument("--conference-data", required=True)
+    conference_jobs.add_argument("--recording-manifest")
+    conference_jobs.add_argument("--version-name", default=CONFERENCE_VERSION_NAME)
+    conference_jobs.add_argument("--batch-index")
+
+    conference_apply = subparsers.add_parser("conference-apply")
+    conference_apply.add_argument("output_roots", nargs="+")
+    conference_apply.add_argument("--version-name", default=CONFERENCE_VERSION_NAME)
+    conference_apply.add_argument(
+        "--minimum-confidence",
+        choices=("high", "medium", "low"),
+        default="medium",
+    )
+    conference_apply.add_argument("--require-all-responses", action="store_true")
+    conference_apply.add_argument("--summary-output")
+
     return parser
 
 
@@ -200,6 +231,41 @@ def _run_review_ui(args) -> int:
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(
         render_review_html(items, source_name=queue_path.name),
+        encoding="utf-8",
+    )
+    return 0
+
+
+def _run_conference_jobs(args) -> int:
+    archive = load_conference_archive(args.conference_data)
+    manifest_entries = load_recording_manifest(args.recording_manifest)
+    generate_conference_correction_jobs(
+        args.output_roots,
+        archive=archive,
+        manifest_entries=manifest_entries,
+        version_name=args.version_name,
+        batch_index_path=args.batch_index,
+    )
+    return 0
+
+
+def _run_conference_apply(args) -> int:
+    summary = apply_conference_correction_responses(
+        args.output_roots,
+        version_name=args.version_name,
+        minimum_confidence=args.minimum_confidence,
+        require_all_responses=args.require_all_responses,
+    )
+    if args.summary_output:
+        summary_path = Path(args.summary_output)
+    else:
+        summary_path = (
+            Path(args.output_roots[0]).resolve().parent
+            / f"{args.version_name}_apply_summary.json"
+        )
+    summary_path.parent.mkdir(parents=True, exist_ok=True)
+    summary_path.write_text(
+        json.dumps(summary, ensure_ascii=False, indent=2),
         encoding="utf-8",
     )
     return 0
