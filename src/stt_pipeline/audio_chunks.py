@@ -29,6 +29,7 @@ def build_audio_chunk_plan(
     chunk_dir = Path(output_dir) / "audio_chunks"
     chunk_pattern = chunk_dir / "chunk_%03d.wav"
     safe_seconds = max(1, int(chunk_seconds))
+    codec_args = ("-c", "copy") if input_audio.suffix.casefold() == ".wav" else ()
     return AudioChunkPlan(
         input_path=input_audio,
         output_dir=chunk_dir,
@@ -39,6 +40,7 @@ def build_audio_chunk_plan(
             "-y",
             "-i",
             str(input_audio),
+            *codec_args,
             "-f",
             "segment",
             "-segment_time",

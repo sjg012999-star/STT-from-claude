@@ -20,8 +20,16 @@ class AudioChunksTest(unittest.TestCase):
         self.assertEqual(plan.output_dir, root / "out" / "audio_chunks")
         self.assertEqual(plan.chunk_pattern, root / "out" / "audio_chunks" / "chunk_%03d.wav")
         self.assertEqual(plan.command[0], "ffmpeg")
+        self.assertIn("copy", plan.command)
         self.assertIn("-segment_time", plan.command)
         self.assertIn("600", plan.command)
+
+    def test_does_not_stream_copy_non_wav_inputs_into_wav_chunks(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            plan = build_audio_chunk_plan(root / "seminar.mp3", root / "out")
+
+        self.assertNotIn("copy", plan.command)
 
     def test_chunk_audio_uses_injected_runner_and_returns_sorted_chunks(self):
         calls = []

@@ -1,8 +1,13 @@
 # Codex Handoff - 2026-07-06
 
-## Latest Checkpoint - 2026-07-10
+## Latest Checkpoint - 2026-07-11
 
 - Cost policy changed after the real batch: use the Platform API key for `gpt-4o-transcribe` only by default. Run correction, summarization, slide interpretation, and evidence synthesis through the active Codex ChatGPT-sign-in/OAuth task; paid Responses API post-processing now requires explicit user opt-in.
+- The remaining July 6, 8, and 9 V0 batch is complete: 36 recordings, 45,522.371 seconds, 101,788 transcript words, and 97 STT chunks. The official `gpt-4o-transcribe` estimate is $4.552 at $0.006/minute; this is an estimate, not a dashboard-confirmed final charge.
+- Start review at `outputs/crs_2026_remaining_v0_summary.md`, then open the date indexes under `outputs/crs_2026_2026-07-06/`, `outputs/crs_2026_2026-07-08/`, and `outputs/crs_2026_2026-07-09/`. These ignored outputs are private artifacts and must not be committed.
+- Full V0 QA passed for all 36 recordings: model and source mappings, required outputs, paid-feature disable flags, chunk inventories, 16 kHz mono PCM preprocessing, and source/preprocessed durations. The maximum duration delta was 0.000042 seconds; the 18-second LAI short clip is the only accepted `no_speech` result.
+- Context-only OAuth post-processing has not yet been run for these 36 recordings. Preserve V0 unchanged, write any no-material correction as a separate V1, and reserve material-grounded work for a separate V2.
+- WAV chunking now uses ffmpeg stream copy after preprocessing, avoiding a redundant second PCM encode. Non-WAV inputs retain the previous re-encode behavior; focused and full tests cover this path.
 - The local Codex CLI reports `Logged in using ChatGPT`. `codex exec --ignore-user-config ... -m gpt-5.5` was verified through subscription access, but the current app task is preferred because repeated cold CLI runs waste plan tokens on startup context.
 - The current global config enables fast mode, which consumes plan credits faster. Do not use fast mode for bulk transcript post-processing.
 - A real July 7 conference batch was processed locally under the ignored `outputs/crs_2026_2026-07-07/` directory. Do not commit recordings, transcripts, slide materials, or generated private-session artifacts.
