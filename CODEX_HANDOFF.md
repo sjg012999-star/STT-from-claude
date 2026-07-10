@@ -2,6 +2,9 @@
 
 ## Latest Checkpoint - 2026-07-10
 
+- Cost policy changed after the real batch: use the Platform API key for `gpt-4o-transcribe` only by default. Run correction, summarization, slide interpretation, and evidence synthesis through the active Codex ChatGPT-sign-in/OAuth task; paid Responses API post-processing now requires explicit user opt-in.
+- The local Codex CLI reports `Logged in using ChatGPT`. `codex exec --ignore-user-config ... -m gpt-5.5` was verified through subscription access, but the current app task is preferred because repeated cold CLI runs waste plan tokens on startup context.
+- The current global config enables fast mode, which consumes plan credits faster. Do not use fast mode for bulk transcript post-processing.
 - A real July 7 conference batch was processed locally under the ignored `outputs/crs_2026_2026-07-07/` directory. Do not commit recordings, transcripts, slide materials, or generated private-session artifacts.
 - `V0_raw` and the no-material `V1_context_only` are complete for 15 recordings. V1 uses exact-match first-pass correction plus a blind conservative second pass; the raw transcript was not overwritten.
 - Start local result review at `outputs/crs_2026_2026-07-07/comparison_overview.md`. The combined V1 transcript and per-session diffs are under `versions/V1_context_only/`.
@@ -108,7 +111,7 @@ The STT router supports `gpt-4o`, `gpt-4o-mini`, `whisper-1`, `diarize`, and `ge
 `stt run ... --pack ./materials` now merges `--terms-file` with prompt terms extracted from `.txt`, `.md`, `.pptx`, slide OCR `.json`, and slide photos when `--ocr-images` is passed. PDFs are not mixed into prompt terms; they are tracked as `pdf_sources` and can be processed with `--extract-pdfs --pdf-extractor-script ...`.
 Use `--plan-reference-search` to write `reference_lookup_jobs.json` with DOI, Crossref, OpenAlex, and DOI URL candidates. This does not perform network lookup or download.
 Use `--lookup-references` to perform live Crossref/OpenAlex/Semantic Scholar metadata lookup, try publisher-specific PDF fallback URLs, and cache open PDF links into `reference_cache/*.pdf`. It also writes `reference_lookup_results.json` with `metadata_source`, `metadata_quality_score`, `review_flags`, and `publisher_pdf_urls`; when combined with `--extract-pdfs`, cached PDFs are passed to the figure/table extraction workflow.
-Use `--preprocess` to run ffmpeg before STT. Use `--correct` only when `OPENAI_MODEL` is set; it asks for structured correction JSON and applies only exact declared replacements. Use `--summarize` for the basic Markdown summary.
+Use `--preprocess` to run ffmpeg before STT. `--correct`, `--llm-summarize`, and `--ocr-images` are paid Platform API paths and must not be used by default. Prefer Codex ChatGPT-sign-in/OAuth for those post-processing stages. If the user explicitly opts into paid correction, set `OPENAI_MODEL`; the adapter asks for structured correction JSON and applies only exact declared replacements. Use `--summarize` for the basic deterministic Markdown summary.
 Use `--chunk-audio --chunk-seconds 600` for long recordings that may exceed STT file upload limits. Chunking runs after preprocessing, writes `audio_chunks/chunk_*.wav`, transcribes each chunk, and offsets timestamps before writing the combined transcript.
 Use `--correction-chunk-size` and `--correction-overlap` for long recordings; chunk provenance is written to `corrections.json` and `run_manifest.json`.
 Use `--save-glossary ./glossary.tsv` with `--correct` to accumulate applied correction pairs. The saved TSV can be passed back as `--terms-file`; only the `corrected` column is used as prompt terms.

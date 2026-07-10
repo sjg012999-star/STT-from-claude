@@ -3,7 +3,7 @@
 학회 세미나(주 용도), 강연, 회의 녹음(Zoom H1e)을 대상으로:
 
 1. 여러 억양의 **영어/한국어 음성 → 전사** (OpenAI/Gemini 클라우드 API)
-2. **앞뒤 문맥 기반 오인식 교정** (OpenAI API + Knowledge Pack 용어집)
+2. **앞뒤 문맥 기반 오인식 교정** (Codex ChatGPT 로그인/OAuth + Knowledge Pack 용어집)
 3. **교정 내역을 별도 표로 정리** (환각 방지 diff 검증 포함)
 4. 용도별 프로필(학회/강연/회의)에 맞는 **요약 정리**
 
@@ -37,6 +37,21 @@
 
 ## CLI Preview
 
+### 기본 비용 정책
+
+- Platform API 키는 기본적으로 `gpt-4o-transcribe` 전사에만 사용합니다.
+- 전사 후 문맥 교정, 요약, 슬라이드 해석, 레퍼런스 통합은 로그인된 Codex 앱/CLI의 ChatGPT 구독 접근으로 처리합니다.
+- ChatGPT 로그인 사용량은 구독 플랜의 사용량 또는 크레딧을 소비하지만 OpenAI Platform API 종량제 청구에는 포함되지 않습니다.
+- `--correct`, `--llm-summarize`, `--ocr-images`는 기존의 **유료 Platform API 옵션**이므로 명시적으로 비용을 허용한 경우에만 사용합니다.
+
+저비용 기본 실행은 전사까지만 CLI에서 수행합니다:
+
+```bash
+stt transcribe sample.wav --profile seminar --provider gpt-4o --output out/seminar
+```
+
+그다음 Codex에서 `transcript.json`과 선택적 보강자료를 읽어 별도 버전의 교정본과 변경 내역을 생성합니다. 원본 전사는 덮어쓰지 않습니다.
+
 초기 1회 설치:
 
 ```bash
@@ -64,11 +79,13 @@ export GEMINI_AUDIO_MODEL="gemini-3.5-flash"  # optional default
 
 OpenAI가 기본 provider이며 Gemini는 명시적으로 `--provider gemini-audio`를 선택했을 때만 호출됩니다.
 
-교정 옵션까지 쓰려면 OpenAI 텍스트 모델도 환경변수로 지정:
+유료 Responses API 교정을 명시적으로 사용할 때만 OpenAI 텍스트 모델을 지정합니다:
 
 ```bash
 export OPENAI_MODEL="your-openai-text-model"
 ```
+
+기본 흐름에서는 이 환경변수와 `--correct`가 필요하지 않습니다.
 
 자료 없이 전사:
 

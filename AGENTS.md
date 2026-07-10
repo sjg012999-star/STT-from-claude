@@ -8,6 +8,9 @@ Project intent:
 
 - Build a conference, lecture, and meeting STT pipeline for Zoom H1e recordings.
 - Use cloud STT for quality and speed; do not add local model dependencies by default.
+- Use the Platform API key for `gpt-4o-transcribe` STT only by default.
+- Perform transcript correction, summarization, slide interpretation, and evidence synthesis in the active Codex ChatGPT-sign-in/OAuth session. Do not call paid Responses API post-processing unless the user explicitly opts in.
+- ChatGPT-sign-in work consumes plan usage or credits rather than Platform API spend; prefer the current long-running Codex task over many cold `codex exec` invocations.
 - Keep one pipeline with profile-specific settings rather than separate STT models per use case.
 - Treat transcript correction and AI enrichment as separate layers with explicit provenance.
 - Use OpenAI-first LLM/vision providers for new implementation work unless the user explicitly requests another provider.

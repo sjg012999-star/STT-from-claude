@@ -37,7 +37,7 @@
 | 비용 | 무료 (시간·발열 비용) | 시간당 ~$0.4 안팎 |
 | 프라이버시 | 유리 | 사용자 우선순위상 허용 (성능 > 보안) |
 
-**결정**: 클라우드 STT 전용. OpenAI와 Gemini 후보를 **실제 세미나 녹음 1개로 직접 비교(bake-off)**하여 기본 API를 확정합니다. 로컬 모델은 설치·운영하지 않으며, LLM 교정·요약·비전 추출은 OpenAI API 기본으로 둡니다.
+**결정**: 클라우드 STT 전용. 기본 전사는 `gpt-4o-transcribe` Platform API를 사용합니다. 로컬 모델은 설치·운영하지 않습니다. 전사 이후의 LLM 교정·요약·비전 해석은 기본적으로 Codex의 ChatGPT 로그인/OAuth 사용량으로 처리하고, 별도 Platform API 호출은 사용자가 비용을 명시적으로 허용한 경우에만 실행합니다.
 
 ---
 
@@ -50,7 +50,7 @@
         │
         ▼
 ⓪ Knowledge Pack 생성 (자료가 있을 때)
-   - PPT 텍스트 추출(python-pptx) / 사진은 OpenAI vision-capable model로 추출
+   - PPT 텍스트 추출(python-pptx) / 사진은 Codex vision 또는 명시적으로 허용된 OCR adapter로 추출
    - 용어·고유명사·논문 레퍼런스 추출
    - (Phase 3) 레퍼런스 논문 조사: Semantic Scholar/arXiv/웹 검색
         │
@@ -65,12 +65,12 @@
    - 세그먼트 타임스탬프 + (회의 프로필) 내장 화자분리
         │
         ▼
-③ LLM 교정 계층 (OpenAI API)
+③ LLM 교정 계층 (Codex ChatGPT 로그인/OAuth 기본)
    - 앞뒤 문맥 + Knowledge Pack 용어집 기반 오인식 교정
    - 구조화된 교정 목록(JSON) + difflib 검증으로 환각 차단
         │
         ▼
-④ 정리·요약 (OpenAI API, 프로필별 템플릿)
+④ 정리·요약 (Codex OAuth 또는 결정론적 프로필 템플릿)
         │
         ▼
 ⑤ (Phase 3) 슬라이드-전사 정렬 + 통합 보강 노트
