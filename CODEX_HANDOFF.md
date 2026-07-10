@@ -2,6 +2,10 @@
 
 ## Latest Checkpoint - 2026-07-10
 
+- A real July 7 conference batch was processed locally under the ignored `outputs/crs_2026_2026-07-07/` directory. Do not commit recordings, transcripts, slide materials, or generated private-session artifacts.
+- `V0_raw` and the no-material `V1_context_only` are complete for 15 recordings. V1 uses exact-match first-pass correction plus a blind conservative second pass; the raw transcript was not overwritten.
+- Start local result review at `outputs/crs_2026_2026-07-07/comparison_overview.md`. The combined V1 transcript and per-session diffs are under `versions/V1_context_only/`.
+- `V2_material_grounded` is intentionally pending user-provided materials. Its unresolved evidence queue is `outputs/crs_2026_2026-07-07/versions/V2_material_grounded/review_queue.md`; V2 must start from the same V0 and remain separate from V1 for a fair comparison.
 - Static review UI implementation, CLI wiring, tests, and documentation are included on `codex/phase1-mvp`.
 - Browser QA confirmed desktop interactions, mobile layout without horizontal overflow, and decision JSON generation after status changes.
 - The QA pass found and fixed both an escaped-newline JavaScript bug and a fragile programmatic download path; regression assertions cover the generated script and native download link.
