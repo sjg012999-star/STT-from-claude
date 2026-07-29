@@ -1,0 +1,4 @@
+interface:
+  display_name: "Conference STT"
+  short_description: "학회·세미나 음성을 문맥 보정해 안전하게 전사"
+  default_prompt: "Use $conference-stt to transcribe the attached seminar recording with context-aware correction while preserving the raw transcript."
