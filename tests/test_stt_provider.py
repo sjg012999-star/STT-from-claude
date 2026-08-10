@@ -38,9 +38,23 @@ class FakeClient:
 
 class SttProviderTest(unittest.TestCase):
     def test_profile_defaults_keep_meeting_diarization_separate(self):
-        self.assertEqual(default_provider_for_profile("seminar"), "gpt-4o")
-        self.assertEqual(default_provider_for_profile("lecture"), "gpt-4o")
+        self.assertEqual(default_provider_for_profile("seminar"), "gpt-transcribe")
+        self.assertEqual(default_provider_for_profile("lecture"), "gpt-transcribe")
+        self.assertEqual(default_provider_for_profile("unknown"), "gpt-transcribe")
         self.assertEqual(default_provider_for_profile("meeting"), "diarize")
+
+    def test_gpt_transcribe_request_uses_compact_terms_as_prompt(self):
+        request = build_openai_stt_request(
+            provider="gpt-transcribe",
+            profile="seminar",
+            prompt_terms=["InTesTiny", "IBD", "PET/MRI"],
+        )
+
+        self.assertEqual(request.model, "gpt-transcribe")
+        self.assertEqual(request.response_format, "json")
+        self.assertIn("InTesTiny", request.prompt or "")
+        self.assertIn("PET/MRI", request.prompt or "")
+        self.assertIsNone(request.chunking_strategy)
 
     def test_gpt4o_request_uses_compact_terms_as_prompt(self):
         request = build_openai_stt_request(
@@ -90,6 +104,25 @@ class SttProviderTest(unittest.TestCase):
         self.assertIsNone(result.segments[0].speaker)
         call = client.transcriptions.calls[0]
         self.assertEqual(call["model"], "gpt-4o-transcribe")
+        self.assertIn("prompt", call)
+
+    def test_transcriber_uses_gpt_transcribe_by_default(self):
+        client = FakeClient()
+        transcriber = OpenAiSttTranscriber(client=client)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            audio_path = Path(tmpdir) / "sample.wav"
+            audio_path.write_bytes(b"fake audio")
+
+            result = transcriber.transcribe(
+                audio_path,
+                profile="seminar",
+                prompt_terms=["InTesTiny"],
+            )
+
+        self.assertEqual(result.provider, "gpt-transcribe")
+        self.assertEqual(result.model, "gpt-transcribe")
+        call = client.transcriptions.calls[0]
+        self.assertEqual(call["model"], "gpt-transcribe")
         self.assertIn("prompt", call)
 
     def test_routed_transcriber_dispatches_gemini_audio_provider(self):

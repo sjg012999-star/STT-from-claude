@@ -1,6 +1,13 @@
 # Codex Handoff - 2026-07-06
 
-## Latest Checkpoint - 2026-07-11
+## Latest Checkpoint - 2026-08-10
+
+- The user explicitly selected `gpt-transcribe` as the new default without an A/B rerun. Seminar, lecture, and unknown-profile defaults now resolve to the `gpt-transcribe` provider alias and model.
+- Keep `gpt-4o`/`gpt-4o-transcribe` as an explicit legacy fallback. Meeting profile defaults remain `diarize`/`gpt-4o-transcribe-diarize` so speaker attribution behavior does not change.
+- The new default still receives the existing compact Knowledge Pack prompt terms. This change does not add keyword/language options, local model dependencies, or paid post-processing calls.
+- Tests and documentation must remain API-free; a live transcription requires the existing OpenAI Platform API credential to be available in the execution environment.
+
+## Historical Checkpoint - 2026-07-11
 
 - Cost policy changed after the real batch: use the Platform API key for `gpt-4o-transcribe` only by default. Run correction, summarization, slide interpretation, and evidence synthesis through the active Codex ChatGPT-sign-in/OAuth task; paid Responses API post-processing now requires explicit user opt-in.
 - The remaining July 6, 8, and 9 V0 batch is complete: 36 recordings, 45,522.371 seconds, 101,788 transcript words, and 97 STT chunks. The official `gpt-4o-transcribe` estimate is $4.552 at $0.006/minute; this is an estimate, not a dashboard-confirmed final charge.
@@ -126,7 +133,7 @@ Live OpenAI STT is wired behind `OpenAiSttTranscriber`, Gemini audio transcripti
 
 Keep real cloud STT and OpenAI API calls behind adapters. Tests should use fakes and local fixtures, not paid network calls.
 OpenAI text model names must come from `OPENAI_MODEL`; use `OPENAI_VISION_MODEL` only when a distinct vision model is needed. Do not hardcode another provider model into the pipeline.
-The STT router supports `gpt-4o`, `gpt-4o-mini`, `whisper-1`, `diarize`, and `gemini-audio` provider aliases. All are cloud API paths; do not add a local model dependency unless the user explicitly reverses the API-only decision. Knowledge Pack remains optional; Phase 1 uses compact STT prompt hints, not heavy enrichment. `gemini-audio` uses `GEMINI_API_KEY` and optional `GEMINI_AUDIO_MODEL`, uploads through Gemini Files API, and deletes the remote file after each request.
+The STT router supports `gpt-transcribe`, `gpt-4o`, `gpt-4o-mini`, `whisper-1`, `diarize`, and `gemini-audio` provider aliases. `gpt-transcribe` is the default for seminar, lecture, and unknown profiles; `gpt-4o` is a legacy fallback; meeting remains `diarize`. All are cloud API paths; do not add a local model dependency unless the user explicitly reverses the API-only decision. Knowledge Pack remains optional; Phase 1 uses compact STT prompt hints, not heavy enrichment. `gemini-audio` uses `GEMINI_API_KEY` and optional `GEMINI_AUDIO_MODEL`, uploads through Gemini Files API, and deletes the remote file after each request.
 `stt run ... --pack ./materials` now merges `--terms-file` with prompt terms extracted from `.txt`, `.md`, `.pptx`, slide OCR `.json`, and slide photos when `--ocr-images` is passed. PDFs are not mixed into prompt terms; they are tracked as `pdf_sources` and can be processed with `--extract-pdfs --pdf-extractor-script ...`.
 Use `--plan-reference-search` to write `reference_lookup_jobs.json` with DOI, Crossref, OpenAlex, and DOI URL candidates. This does not perform network lookup or download.
 Use `--lookup-references` to perform live Crossref/OpenAlex/Semantic Scholar metadata lookup, try publisher-specific PDF fallback URLs, and cache open PDF links into `reference_cache/*.pdf`. It also writes `reference_lookup_results.json` with `metadata_source`, `metadata_quality_score`, `review_flags`, and `publisher_pdf_urls`; when combined with `--extract-pdfs`, cached PDFs are passed to the figure/table extraction workflow.
