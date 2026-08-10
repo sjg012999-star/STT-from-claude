@@ -10,12 +10,13 @@ from stt_pipeline.transcript import TranscriptResult, TranscriptSegment
 
 
 PROFILE_DEFAULTS = {
-    "seminar": "gpt-4o",
-    "lecture": "gpt-4o",
+    "seminar": "gpt-transcribe",
+    "lecture": "gpt-transcribe",
     "meeting": "diarize",
 }
 
 PROVIDER_MODELS = {
+    "gpt-transcribe": "gpt-transcribe",
     "gpt-4o": "gpt-4o-transcribe",
     "gpt-4o-mini": "gpt-4o-mini-transcribe",
     "whisper-1": "whisper-1",
@@ -34,7 +35,7 @@ class OpenAiSttRequest:
 
 
 def default_provider_for_profile(profile: str) -> str:
-    return PROFILE_DEFAULTS.get(profile, "gpt-4o")
+    return PROFILE_DEFAULTS.get(profile, "gpt-transcribe")
 
 
 def build_openai_stt_request(
@@ -63,7 +64,7 @@ def build_openai_stt_request(
         response_format="json",
         prompt=(
             _build_prompt(prompt_terms)
-            if provider in {"gpt-4o", "gpt-4o-mini"}
+            if provider in {"gpt-transcribe", "gpt-4o", "gpt-4o-mini"}
             else None
         ),
     )

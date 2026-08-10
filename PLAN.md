@@ -32,12 +32,12 @@
 | 항목 | 로컬 (M2 Air) | 클라우드 API |
 |---|---|---|
 | 속도 | faster-whisper는 맥에서 CPU만 사용 → 1시간 녹음에 2~3시간+. mlx-whisper/whisper.cpp(Metal)로도 10~25분, **팬리스 스로틀링**으로 지속 부하 시 저하 | 1시간 녹음 ≈ 수 분 |
-| 정확도 | Whisper large-v3 수준이 상한 | 2026 현재 상용 API(gpt-4o-transcribe, ElevenLabs Scribe, AssemblyAI 등)가 억양 영어·한국어에서 우위 |
+| 정확도 | Whisper large-v3 수준이 상한 | 2026 현재 상용 API(gpt-transcribe, gpt-4o-transcribe, ElevenLabs Scribe, AssemblyAI 등)가 억양 영어·한국어에서 우위 |
 | 화자분리 | pyannote를 CPU로 → 매우 느림 | **API 내장 diarization** 사용 가능 → 파이프라인 단순화 |
-| 비용 | 무료 (시간·발열 비용) | 시간당 ~$0.4 안팎 |
+| 비용 | 무료 (시간·발열 비용) | 기본 `gpt-transcribe` 기준 시간당 약 $0.27 |
 | 프라이버시 | 유리 | 사용자 우선순위상 허용 (성능 > 보안) |
 
-**결정**: 클라우드 STT 전용. 기본 전사는 `gpt-4o-transcribe` Platform API를 사용합니다. 로컬 모델은 설치·운영하지 않습니다. 전사 이후의 LLM 교정·요약·비전 해석은 기본적으로 Codex의 ChatGPT 로그인/OAuth 사용량으로 처리하고, 별도 Platform API 호출은 사용자가 비용을 명시적으로 허용한 경우에만 실행합니다.
+**결정**: 클라우드 STT 전용. 기본 전사는 `gpt-transcribe` Platform API를 사용합니다. 기존 `gpt-4o` alias는 명시적 legacy fallback으로만 유지하고, 회의 화자분리는 `gpt-4o-transcribe-diarize`를 계속 사용합니다. 로컬 모델은 설치·운영하지 않습니다. 전사 이후의 LLM 교정·요약·비전 해석은 기본적으로 Codex의 ChatGPT 로그인/OAuth 사용량으로 처리하고, 별도 Platform API 호출은 사용자가 비용을 명시적으로 허용한 경우에만 실행합니다.
 
 ---
 
@@ -96,7 +96,7 @@ ffmpeg -i input.wav -ac 1 -ar 16000 -af loudnorm=I=-16:TP=-1.5:LRA=11 prep.wav
 
 ### ② STT (클라우드)
 
-- **기본 후보**: gpt-4o-transcribe(OpenAI), ElevenLabs Scribe(diarization 내장), AssemblyAI. 한국어 단독 세션 비중이 높으면 클로바 스피치도 후보.
+- **기본 모델**: gpt-transcribe(OpenAI). `gpt-4o-transcribe`는 legacy fallback, `gpt-4o-transcribe-diarize`는 회의 화자분리 전용으로 유지합니다. Gemini Audio, ElevenLabs Scribe, AssemblyAI 등은 명시적 비교 후보입니다.
 - **선정 방법**: 실제 세미나 녹음 1개(억양 영어 + 한영 혼용 구간 포함)로 동일 구간 전사를 비교하는 bake-off 스크립트를 Phase 1에서 먼저 작성. WER보다 **전문용어·고유명사 정확도**를 중점 평가.
 - **용어 주입**: Knowledge Pack에서 추출한 용어를 API별 메커니즘(prompt / keyword boosting / custom vocabulary)으로 전달. 억양 있는 발표의 전문용어 인식률을 올리는 가장 효과 큰 단일 수단.
 - **화자분리**: 회의 프로필은 diarization 내장 API 사용(pyannote 로컬 실행 제거). 학회 Q&A는 "발표자/질문자" 경량 구분.
@@ -258,7 +258,7 @@ stt-conference/
 | 단계 | 시간 | 비용 |
 |---|---|---|
 | 전처리 | ~1분 | 무료 |
-| STT (클라우드 API) | 수 분 | ~$0.4 |
+| STT (클라우드 API) | 수 분 | 기본 `gpt-transcribe` 1시간 기준 약 $0.27 |
 | LLM 교정 (~15K 토큰, 청크별) | 수 분 (Batch/비동기: 수십 분) | 선택한 OpenAI 모델 기준 |
 | 요약 | ~1분 | ~$0.1 |
 | Knowledge Pack 조사 (Phase 3, 자료 있을 때) | 수 분 | ~$0.1~0.3 |
@@ -271,7 +271,7 @@ stt-conference/
 ## 7. 구현 로드맵
 
 ### Phase 1 — MVP (CLI, 학회 프로필)
-- [x] **STT adapter + bake-off CLI** — `gpt-4o`, `gpt-4o-mini`, `whisper-1`, `diarize`, `gemini-audio` 후보를 같은 녹음으로 비교 가능
+- [x] **STT adapter + bake-off CLI** — `gpt-transcribe`, `gpt-4o`, `gpt-4o-mini`, `whisper-1`, `diarize`, `gemini-audio` 후보를 같은 녹음으로 비교 가능
 - [x] `stt run seminar.wav --profile seminar --pack ./materials/` 기본 흐름 — 텍스트/PPTX/OCR JSON 자료에서 prompt terms 생성 후 transcript.md/transcript.json 출력
 - [x] 전처리 옵션 → 클라우드 STT → md/json/srt 출력
 - [x] 긴 녹음 업로드 제한 대응: ffmpeg chunking + 전사 병합 (`--chunk-audio`)

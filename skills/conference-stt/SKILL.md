@@ -60,7 +60,7 @@ Write the provider output to a dedicated `V0_raw/` directory:
 ```bash
 stt transcribe AUDIO_PATH \
   --profile seminar \
-  --provider gpt-4o \
+  --provider gpt-transcribe \
   --terms-file CONTEXT_TERMS \
   --output OUTPUT_ROOT/V0_raw
 ```
@@ -68,6 +68,9 @@ stt transcribe AUDIO_PATH \
 Adjust this command conservatively:
 
 - Omit `--terms-file` when no grounded terms are available.
+- Use `gpt-transcribe` for seminar and lecture transcription by default. Keep
+  `gpt-4o` only as an explicit legacy fallback; meeting diarization still uses
+  the whole file with `--provider diarize`.
 - Prefer whole-file transcription when the provider accepts the input.
 - Add `--preprocess` only when normalization is useful.
 - Add `--chunk-audio --chunk-seconds 600` only when file-size or duration
